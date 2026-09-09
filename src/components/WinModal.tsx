@@ -12,6 +12,18 @@ function formatTime(ms: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+function MiniStars({ n }: { n: number }) {
+  return (
+    <span className="mini-stars">
+      {[1, 2, 3].map((i) => (
+        <span key={i} className={i <= n ? 'star-filled' : ''}>
+          ★
+        </span>
+      ))}
+    </span>
+  )
+}
+
 export default function WinModal() {
   const game = useGameStore((s) => s.game)
   const levelConfig = useGameStore((s) => s.levelConfig)
@@ -52,18 +64,50 @@ export default function WinModal() {
             </span>
           ))}
         </div>
+
+        <div className="win-breakdown">
+          <div className="win-breakdown-title">星等 = 步數與時間評分中較低的一項</div>
+          {(
+            [
+              {
+                key: 'moves',
+                label: '步數',
+                value: `${score.moves}`,
+                sub: score.moveStars,
+                targets: `3★ ≤${levelConfig.targetThreeStarMoves}　2★ ≤${levelConfig.targetTwoStarMoves}`,
+              },
+              {
+                key: 'time',
+                label: '時間',
+                value: formatTime(score.timeMs),
+                sub: score.timeStars,
+                targets: `3★ ≤${formatTime(levelConfig.targetThreeStarTime * 1000)}　2★ ≤${formatTime(levelConfig.targetTwoStarTime * 1000)}`,
+              },
+            ] as const
+          ).map((row) => (
+            <div
+              key={row.key}
+              className={`wb-row ${row.sub === score.stars && score.stars < 3 ? 'wb-limiting' : ''}`}
+            >
+              <span className="wb-label">{row.label}</span>
+              <span className="wb-value">{row.value}</span>
+              <MiniStars n={row.sub} />
+              <span className="wb-targets">{row.targets}</span>
+            </div>
+          ))}
+          {score.stars < 3 && (
+            <p className="wb-hint">
+              {score.moveStars <= score.timeStars
+                ? `減少步數就能提升星等（少 ${Math.max(1, score.moves - levelConfig.targetThreeStarMoves)} 步達 3★）`
+                : `加快速度就能提升星等（快 ${Math.max(1, Math.ceil(score.timeMs / 1000) - levelConfig.targetThreeStarTime)} 秒達 3★）`}
+            </p>
+          )}
+        </div>
+
         <div className="win-stats">
           <div>
-            <span className="win-stat-label">步數</span>
-            <span className="win-stat-value">{score.moves}</span>
-          </div>
-          <div>
-            <span className="win-stat-label">時間</span>
-            <span className="win-stat-value">{formatTime(score.timeMs)}</span>
-          </div>
-          <div>
-            <span className="win-stat-label">分類</span>
-            <span className="win-stat-value">{game.completedCategories.length} / {game.completedCategories.length}</span>
+            <span className="win-stat-label">完成分類</span>
+            <span className="win-stat-value">{game.completedCategories.length}</span>
           </div>
           <div>
             <span className="win-stat-label">金幣</span>

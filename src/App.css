@@ -174,6 +174,13 @@
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
+
+  /* Card geometry. --card-w is set per-level on the element (Board.tsx) so the
+     whole table scales to fit the viewport; everything else derives from it. */
+  --card-w: 84px;
+  --card-h: calc(var(--card-w) * 1.309);
+  --card-gap: 8px;
+  --card-step: calc(var(--card-w) * 0.4); /* fanned-card vertical offset */
 }
 
 .hud {
@@ -232,8 +239,8 @@
 }
 
 .slot {
-  flex: 1;
-  min-width: 120px;
+  flex: 1 1 140px;
+  min-width: 96px;
   min-height: 64px;
   border-radius: var(--radius);
   border: 2px dashed var(--paper-deep);
@@ -286,24 +293,23 @@
 
 .table-area {
   display: flex;
-  gap: 12px;
+  gap: var(--card-gap);
   align-items: flex-start;
-  flex-wrap: wrap;
 }
 
 .columns-row {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
-  gap: 12px;
-  overflow-x: auto;
-  padding-bottom: 12px;
+  gap: var(--card-gap);
   min-width: 0;
+  /* No scrollbar, ever — the card width (Board.tsx) is sized so the row fits. */
+  overflow: visible;
 }
 
 .column {
   position: relative;
-  width: 84px;
-  flex-shrink: 0;
+  width: var(--card-w);
+  flex: 0 0 auto;
   border-radius: var(--radius);
   background: rgba(139, 90, 59, 0.08);
 }
@@ -318,7 +324,7 @@
 
 .deck-waste {
   display: flex;
-  gap: 10px;
+  gap: var(--card-gap);
   flex-shrink: 0;
 }
 
@@ -327,8 +333,8 @@
   padding: 0;
   border: none;
   background: none;
-  width: 84px;
-  height: 110px;
+  width: var(--card-w);
+  height: var(--card-h);
 }
 
 .deck-count {
@@ -342,13 +348,13 @@
 }
 
 .waste-pile {
-  width: 84px;
-  height: 110px;
+  width: var(--card-w);
+  height: var(--card-h);
 }
 
 .card-empty-pile {
-  width: 84px;
-  height: 110px;
+  width: var(--card-w);
+  height: var(--card-h);
   border: 2px dashed var(--paper-deep);
   border-radius: var(--radius);
   display: flex;
@@ -360,15 +366,15 @@
 
 /* ---------- Cards ---------- */
 .card {
-  width: 84px;
-  height: 110px;
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: var(--radius);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   padding: 6px;
-  font-size: 15px;
+  font-size: clamp(11px, calc(var(--card-w) * 0.19), 15px);
   font-weight: 600;
   user-select: none;
   touch-action: none;
@@ -559,6 +565,71 @@
   color: var(--accent);
 }
 
+.win-breakdown {
+  margin: 12px 0 4px;
+  text-align: left;
+}
+
+.win-breakdown-title {
+  font-size: 11px;
+  color: var(--ink-soft);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.wb-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  column-gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+}
+
+.wb-row + .wb-row {
+  margin-top: 4px;
+}
+
+.wb-limiting {
+  background: var(--accent-soft);
+}
+
+.wb-label {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.wb-value {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.wb-targets {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.mini-stars {
+  letter-spacing: 2px;
+  color: var(--paper-deep);
+  font-size: 13px;
+}
+
+.mini-stars .star-filled {
+  color: var(--accent);
+}
+
+.wb-hint {
+  margin: 8px 0 0;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--wood-dark);
+}
+
 .win-stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -600,27 +671,9 @@
 
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
-  .table-area {
-    flex-direction: column;
-  }
-  .todo-list {
-    width: 100%;
-  }
-  .column,
-  .card,
-  .card-empty-pile,
-  .deck-pile,
-  .waste-pile {
-    width: 64px;
-  }
-  .card,
-  .card-empty-pile,
-  .deck-pile,
-  .waste-pile {
-    height: 88px;
-  }
-  .card {
-    font-size: 13px;
+  .game-screen {
+    padding: 8px 8px 20px;
+    --card-gap: 6px;
   }
 }
 

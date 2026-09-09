@@ -29,11 +29,13 @@ function starsFor(value: number, threeStarMax: number, twoStarMax: number): 1 | 
 /** Stars = the more conservative of the moves-based and time-based ratings. */
 export function calculateScore(state: GameState, config: LevelConfig, elapsedMs: number): ScoreResult {
   if (!checkWin(state)) {
-    return { stars: 0, moves: state.moves, timeMs: elapsedMs, coinsEarned: 0 }
+    return { stars: 0, moveStars: 0, timeStars: 0, moves: state.moves, timeMs: elapsedMs, coinsEarned: 0 }
   }
   const moveStars = starsFor(state.moves, config.targetThreeStarMoves, config.targetTwoStarMoves)
   const timeStars = starsFor(elapsedMs / 1000, config.targetThreeStarTime, config.targetTwoStarTime)
+  // The overall rating is the more conservative of the two — so whichever of
+  // moveStars/timeStars is lower is the one holding the score back.
   const stars = Math.min(moveStars, timeStars) as 1 | 2 | 3
   const coinsEarned = 10 + stars * 10
-  return { stars, moves: state.moves, timeMs: elapsedMs, coinsEarned }
+  return { stars, moveStars, timeStars, moves: state.moves, timeMs: elapsedMs, coinsEarned }
 }

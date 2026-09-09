@@ -133,6 +133,10 @@ export interface HintResult {
 
 export interface ScoreResult {
   stars: 0 | 1 | 2 | 3
+  /** Rating from moves alone (vs the level's move targets). 0 before a win. */
+  moveStars: 0 | 1 | 2 | 3
+  /** Rating from elapsed time alone (vs the level's time targets). 0 before a win. */
+  timeStars: 0 | 1 | 2 | 3
   moves: number
   timeMs: number
   coinsEarned: number

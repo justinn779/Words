@@ -318,6 +318,15 @@ describe('checkWin / calculateScore', () => {
     expect(calculateScore(slow, config, 500_000).stars).toBe(1)
   })
 
+  it('reports the moves and time sub-ratings, and caps stars at the lower one', () => {
+    // Perfect moves (<=5), but slow enough to be a 2-star time (60 < 90 <= 120).
+    const state = makeState([[]], { completedCategories: ['fruit', 'animal'], moves: 3 })
+    const score = calculateScore(state, config, 90_000)
+    expect(score.moveStars).toBe(3)
+    expect(score.timeStars).toBe(2)
+    expect(score.stars).toBe(2)
+  })
+
   it('awards 0 stars and no coins for an unfinished game', () => {
     const state = makeState([[]], { completedCategories: ['fruit'] })
     const score = calculateScore(state, config, 10_000)
