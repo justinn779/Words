@@ -18,8 +18,10 @@ this document ever disagree, the engine (and its tests) are the source of truth.
   category**.
 - A Word Card may **never** be placed on a Category Card, active or not.
 - A contiguous, face-up run of same-category Word Cards at the top of a column forms a
-  **stack** and can be moved together in one action (`moveStack`). A face-down card
-  underneath a run is never included.
+  **stack** and can be moved together in one action (`moveStack`) — onto another
+  column/empty space, or delivered straight into that category's active slot when the
+  run fits in the slot's remaining capacity. A face-down card underneath a run is
+  never included.
 - Recognizing a same-category pair (e.g. stacking 鯨魚 onto 海豚) is accepted
   immediately — the player gets real-time confirmation their categorization is
   correct, without waiting for the Category Card (spec section 23).
@@ -43,8 +45,9 @@ This is the game's central mechanic:
 
 - There are fewer Category Slots than categories in most levels — this is the
   intentional bottleneck (spec section 12/14).
-- Sending a Word Card to an active slot for its category **removes it from the
-  table** and increments that slot's `collected` count.
+- Sending a Word Card (or a whole same-category stack) to an active slot for its
+  category **removes it from the table** and increments that slot's `collected` count
+  by the number of cards delivered. A stack that would exceed `required` is rejected.
 - When `collected === required`, the category is complete: it's recorded in
   `completedCategories`, and the slot is freed for another Category Card.
 - The To-do List (`getTodoList`) is derived from `categoryMeta` + `categorySlots` +

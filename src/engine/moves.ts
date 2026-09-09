@@ -53,12 +53,21 @@ function canPlaceOnColumn(state: GameState, movingBottomCard: Card, columnIndex:
   return top.cardType === 'word' && top.categoryId === movingBottomCard.categoryId
 }
 
-function canPlaceOnSlot(state: GameState, card: Card, slotIndex: number): boolean {
+function canPlaceOnSlot(state: GameState, cards: Card[], slotIndex: number): boolean {
   const slot = state.categorySlots[slotIndex]
-  if (card.cardType === 'category') {
-    return slot === null
+  const bottom = cards[0]
+  if (bottom.cardType === 'category') {
+    // A category card activates an empty slot; it is never part of a run.
+    return cards.length === 1 && slot === null
   }
-  return slot !== null && slot.categoryId === card.categoryId && slot.collected < slot.required
+  // A whole same-category word run can be delivered at once, as long as it fits
+  // in the slot's remaining capacity. (canMoveStack guarantees the run is all
+  // face-up, same-category word cards, so checking the bottom card is enough.)
+  return (
+    slot !== null &&
+    slot.categoryId === bottom.categoryId &&
+    slot.collected + cards.length <= slot.required
+  )
 }
 
 export function canPlaceCardsOn(state: GameState, movingCards: Card[], destination: Location): boolean {
@@ -66,7 +75,7 @@ export function canPlaceCardsOn(state: GameState, movingCards: Card[], destinati
   const bottom = movingCards[0]
   if (destination.zone === 'waste') return false
   if (destination.zone === 'slot') {
-    return movingCards.length === 1 && canPlaceOnSlot(state, bottom, destination.index)
+    return canPlaceOnSlot(state, movingCards, destination.index)
   }
   return canPlaceOnColumn(state, bottom, destination.index)
 }
@@ -204,15 +213,18 @@ export function moveCard(state: GameState, cardId: string, destination: Location
   return { success: true, state: finalState }
 }
 
-/** Moves a whole same-category run of word cards from one column to another (or to empty space). */
+/**
+ * Moves a whole same-category run of word cards from one column onto another
+ * column/empty space, or delivers it into that category's active slot in one go.
+ */
 export function moveStack(
   state: GameState,
   columnIndex: number,
   cardIndex: number,
   destination: Location,
 ): MoveResult {
-  if (destination.zone !== 'column') {
-    return { success: false, state, reason: 'stacks-can-only-target-columns' }
+  if (destination.zone !== 'column' && destination.zone !== 'slot') {
+    return { success: false, state, reason: 'stacks-can-only-target-columns-or-slots' }
   }
   if (!canMoveStack(state, columnIndex, cardIndex)) {
     return { success: false, state, reason: 'not-a-movable-stack' }
@@ -224,8 +236,21 @@ export function moveStack(
   }
 
   let next = removeFromSource(state, { zone: 'column', index: columnIndex }, run.length)
-  next = appendToColumn(next, destination.index, run)
-  next = flipTopCard(next, columnIndex)
+
+  if (destination.zone === 'slot') {
+    const slot = next.categorySlots[destination.index]!
+    const collected = slot.collected + run.length
+    const slots = next.categorySlots.slice()
+    slots[destination.index] = { ...slot, collected }
+    next = { ...next, categorySlots: slots }
+    next = flipTopCard(next, columnIndex)
+    if (collected >= slot.required) {
+      next = completeCategory(next, destination.index)
+    }
+  } else {
+    next = appendToColumn(next, destination.index, run)
+    next = flipTopCard(next, columnIndex)
+  }
 
   const finalState = withHistory(state, { ...next, moves: state.moves + 1 })
   return { success: true, state: finalState }

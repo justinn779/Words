@@ -176,9 +176,47 @@ describe('stacks', () => {
     expect(canMoveStack(state, 0, 0)).toBe(false)
   })
 
-  it('a stack move can only target a column, never a slot', () => {
+  it('delivers a whole same-category run into its active slot in one move', () => {
     const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana')]], {
       categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 0, required: 4 }, null],
+    })
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(true)
+    expect(result.state.columns[0]).toHaveLength(0)
+    expect(result.state.categorySlots[0]?.collected).toBe(2)
+    expect(result.state.moves).toBe(1)
+  })
+
+  it('completes and frees the slot when a run finishes it', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana')]], {
+      categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 2, required: 4 }, null],
+    })
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(true)
+    expect(result.state.categorySlots[0]).toBeNull()
+    expect(result.state.completedCategories).toContain('fruit')
+  })
+
+  it('rejects a run that would overflow the slot capacity', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana')]], {
+      categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 3, required: 4 }, null],
+    })
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(false)
+    expect(result.state.columns[0]).toHaveLength(2)
+  })
+
+  it('rejects a run whose category does not match the slot', () => {
+    const state = makeState([[word('animal', 'cat'), word('animal', 'dog')]], {
+      categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 0, required: 4 }, null],
+    })
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(false)
+  })
+
+  it('rejects a run sent to an inactive (empty) slot', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana')]], {
+      categorySlots: [null, null],
     })
     const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
     expect(result.success).toBe(false)

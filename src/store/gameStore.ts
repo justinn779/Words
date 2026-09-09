@@ -236,12 +236,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
   clickSlot: (slotIndex) => {
     const { game, selection } = get()
     if (!game || game.status !== 'playing' || !selection) return
-    if (selection.kind === 'column' && !isRunTop(game, selection.columnIndex, selection.cardIndex)) {
-      // Multi-card stacks can never target a slot.
-      flashInvalid(set, selection.cardId)
-      set({ selection: null })
-      return
-    }
+    // A whole same-category run can be delivered to its slot at once; the engine
+    // (moveStack) validates capacity and category, so no pre-check is needed here.
     attemptMoveSelection(get, set, selection, { zone: 'slot', index: slotIndex })
   },
 

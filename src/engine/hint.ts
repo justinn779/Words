@@ -25,17 +25,19 @@ export function getAvailableMoves(state: GameState): AvailableMove[] {
         })
       }
     }
-    if (cards.length === 1) {
-      for (let s = 0; s < state.categorySlots.length; s++) {
-        const to: Location = { zone: 'slot', index: s }
-        if (canPlaceCardsOn(state, cards, to)) {
-          moves.push({
-            kind: bottom.cardType === 'category' ? 'categoryActivate' : 'wordToSlot',
-            cardId: bottom.id,
-            from,
-            to,
-          })
-        }
+    for (let s = 0; s < state.categorySlots.length; s++) {
+      const to: Location = { zone: 'slot', index: s }
+      if (!canPlaceCardsOn(state, cards, to)) continue
+      if (cards.length === 1) {
+        moves.push({
+          kind: bottom.cardType === 'category' ? 'categoryActivate' : 'wordToSlot',
+          cardId: bottom.id,
+          from,
+          to,
+        })
+      } else {
+        // A whole same-category run delivered into its slot at once.
+        moves.push({ kind: 'stack', cardId: bottom.id, from, stackStartIndex, to })
       }
     }
   }
