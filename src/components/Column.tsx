@@ -2,6 +2,7 @@ import CardView from './CardView'
 import { useGameStore } from '../store/gameStore'
 
 const CARD_OFFSET = 34
+const CARD_HEIGHT = 110
 
 interface ColumnProps {
   columnIndex: number
@@ -16,7 +17,11 @@ export default function Column({ columnIndex }: ColumnProps) {
       className="column"
       data-dropzone="column"
       data-index={columnIndex}
-      style={{ minHeight: 92 + Math.max(0, column.length - 1) * CARD_OFFSET }}
+      // Must cover the full height of the last (absolutely-positioned) card —
+      // its top is (n-1)*CARD_OFFSET, so the pile ends CARD_HEIGHT below that.
+      // Undershooting here let the bottom card overflow .columns-row, which then
+      // (overflow-x:auto forces overflow-y:auto) showed a stray vertical scrollbar.
+      style={{ minHeight: CARD_HEIGHT + Math.max(0, column.length - 1) * CARD_OFFSET }}
     >
       {column.length === 0 && (
         <button

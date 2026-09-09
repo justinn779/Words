@@ -6,14 +6,35 @@
 export type SfxName = 'cardFlip' | 'cardMove' | 'invalid' | 'categoryComplete' | 'levelComplete' | 'coin' | 'unlock'
 
 let ctx: AudioContext | null = null
+// Tones currently scheduled but not yet ended. While a single AudioContext stays
+// in the "running" state the browser marks the whole tab as playing audio (tab
+// speaker icon) even in total silence, so we suspend it once every tone finishes
+// and resume on the next play.
+let activeTones = 0
+let suspendTimer: ReturnType<typeof setTimeout> | null = null
 
 function getContext(): AudioContext | null {
   if (typeof window === 'undefined') return null
   const AudioCtx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
   if (!AudioCtx) return null
   if (!ctx) ctx = new AudioCtx()
+  if (suspendTimer !== null) {
+    clearTimeout(suspendTimer)
+    suspendTimer = null
+  }
   if (ctx.state === 'suspended') ctx.resume().catch(() => {})
   return ctx
+}
+
+function releaseTone() {
+  activeTones = Math.max(0, activeTones - 1)
+  if (activeTones > 0 || !ctx) return
+  // Small grace period so a burst of tones (e.g. a chord) doesn't thrash resume/suspend.
+  if (suspendTimer !== null) clearTimeout(suspendTimer)
+  suspendTimer = setTimeout(() => {
+    suspendTimer = null
+    if (activeTones === 0 && ctx && ctx.state === 'running') ctx.suspend().catch(() => {})
+  }, 200)
 }
 
 function tone(freq: number, startOffset: number, duration: number, type: OscillatorType, gain: number, audio: AudioContext) {
@@ -26,7 +47,9 @@ function tone(freq: number, startOffset: number, duration: number, type: Oscilla
   gainNode.gain.linearRampToValueAtTime(gain, start + 0.01)
   gainNode.gain.exponentialRampToValueAtTime(0.001, start + duration)
   osc.connect(gainNode).connect(audio.destination)
+  osc.onended = releaseTone
   osc.start(start)
+  activeTones++ // only after start() succeeds, so a throw here can't strand the counter above 0
   osc.stop(start + duration + 0.02)
 }
 

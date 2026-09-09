@@ -425,6 +425,11 @@
 .card-dragging {
   box-shadow: var(--shadow-lift);
   transition: none;
+  /* The dragged card follows the cursor, so it sits directly under the drop point.
+     Without this, findDropzoneAt()'s elementFromPoint() would hit the card itself
+     (and resolve to its origin column) instead of the column/slot underneath it.
+     Pointer capture keeps pointermove/up flowing to the card regardless. */
+  pointer-events: none;
 }
 
 .card-shake {
