@@ -286,7 +286,7 @@
 
 .table-area {
   display: flex;
-  gap: 18px;
+  gap: 12px;
   align-items: flex-start;
   flex-wrap: wrap;
 }
@@ -455,13 +455,15 @@
 }
 
 /* ---------- Todo list ---------- */
+/* A full-width strip below the table (not a side column) so it never competes
+   with the board for horizontal room — wide levels used to push the draw pile
+   off-screen behind it. */
 .todo-list {
-  width: 220px;
-  flex-shrink: 0;
+  width: 100%;
   background: var(--card-bg);
   border: 1px solid var(--paper-deep);
   border-radius: var(--radius);
-  padding: 10px 14px;
+  padding: 8px 14px;
 }
 
 .todo-list-header {
@@ -480,12 +482,20 @@
   font-size: 13px;
 }
 
+.todo-list ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding-top: 4px;
+}
+
 .todo-list li {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0;
-  border-top: 1px solid var(--paper-deep);
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--paper-deep);
+  border-radius: 999px;
 }
 
 .todo-check {

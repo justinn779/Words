@@ -18,10 +18,12 @@ export default function Board() {
           {Array.from({ length: columnCount }, (_, i) => (
             <Column key={i} columnIndex={i} />
           ))}
-          <DeckWaste />
         </div>
-        <TodoList />
+        {/* Outside the horizontally-scrolling columns row so the draw pile is
+            always reachable without scrolling, even on wide (6-column) boards. */}
+        <DeckWaste />
       </div>
+      <TodoList />
       <WinModal />
     </div>
   )
