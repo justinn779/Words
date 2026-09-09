@@ -34,10 +34,22 @@ interface FlashState {
   token: number
 }
 
+export interface DragRect {
+  top: number
+  left: number
+  width: number
+  height: number
+}
+
 export interface DragVisual {
   cardIds: string[]
   dx: number
   dy: number
+  /** Viewport-space origin of each dragged card, captured when the drag begins.
+   * Lets CardView render the card `position: fixed` so no `overflow` ancestor
+   * (e.g. the horizontally-scrolling columns row) can clip it while it's lifted
+   * over the category slots. */
+  rects?: Record<string, DragRect>
 }
 
 export type CardLoc = { zone: 'column'; columnIndex: number; cardIndex: number } | { zone: 'waste' }

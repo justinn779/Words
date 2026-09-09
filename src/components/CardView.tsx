@@ -1,7 +1,21 @@
 import { useRef } from 'react'
 import type { Card } from '../engine/types'
-import { useGameStore, type CardLoc } from '../store/gameStore'
+import { useGameStore, type CardLoc, type DragRect } from '../store/gameStore'
 import { findDropzoneAt, DRAG_THRESHOLD } from '../utils/dropzone'
+
+/** Snapshots the current viewport rect of every card about to be dragged, so each
+ * can be re-rendered `position: fixed` (unclippable) for the duration of the drag. */
+function captureRects(cardIds: string[]): Record<string, DragRect> {
+  const rects: Record<string, DragRect> = {}
+  for (const id of cardIds) {
+    const el = document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(id)}"]`)
+    if (el) {
+      const r = el.getBoundingClientRect()
+      rects[id] = { top: r.top, left: r.left, width: r.width, height: r.height }
+    }
+  }
+  return rects
+}
 
 interface CardViewProps {
   card: Card
@@ -27,13 +41,20 @@ export default function CardView({ card, loc, style }: CardViewProps) {
   // The store clears invalidFlash on its own timer, so this is derived purely from
   // state during render — no local timer/effect needed to animate the shake.
   const shake = invalidFlash?.cardId === card.id
-  const isSelected = selection?.cardId === card.id
+  // A mid-column run is selected by its bottom card, but the whole run moves together,
+  // so highlight every card in it — not just the anchor — to make that legible.
+  const inSelectedRun =
+    selection?.kind === 'column' &&
+    loc.zone === 'column' &&
+    loc.columnIndex === selection.columnIndex &&
+    loc.cardIndex >= selection.cardIndex
+  const isSelected = selection?.cardId === card.id || !!inSelectedRun
   const isHinted = hint?.cardId === card.id
   const dragOffset = dragVisual?.cardIds.includes(card.id) ? dragVisual : null
 
   if (!card.faceUp) {
     return (
-      <div className="card card-back" style={style} aria-hidden>
+      <div className="card card-back" style={style} data-card-id={card.id} aria-hidden>
         <div className="card-back-pattern" />
       </div>
     )
@@ -61,7 +82,7 @@ export default function CardView({ card, loc, style }: CardViewProps) {
       if (g && sel) {
         const cardIds =
           sel.kind === 'waste' ? [sel.cardId] : g.columns[sel.columnIndex].slice(sel.cardIndex).map((c) => c.id)
-        setDragVisual({ cardIds, dx: 0, dy: 0 })
+        setDragVisual({ cardIds, dx: 0, dy: 0, rects: captureRects(cardIds) })
       }
     }
 
@@ -69,12 +90,10 @@ export default function CardView({ card, loc, style }: CardViewProps) {
       rafPending.current = true
       requestAnimationFrame(() => {
         rafPending.current = false
-        const sel = useGameStore.getState().selection
-        const g = useGameStore.getState().game
-        if (!sel || !g) return
-        const cardIds =
-          sel.kind === 'waste' ? [sel.cardId] : g.columns[sel.columnIndex].slice(sel.cardIndex).map((c) => c.id)
-        setDragVisual({ cardIds, dx, dy })
+        // Keep the cardIds/rects captured at drag start; only the offset changes.
+        const current = useGameStore.getState().dragVisual
+        if (!current) return
+        setDragVisual({ ...current, dx, dy })
       })
     }
   }
@@ -112,11 +131,28 @@ export default function CardView({ card, loc, style }: CardViewProps) {
   const progress = isCategory && game ? game.categoryMeta[card.categoryId] : null
   const ariaLabel = `${isCategory ? '分類卡' : '文字卡'} ${label}${isSelected ? '（已選取）' : ''}`
 
-  const combinedStyle: React.CSSProperties = {
-    ...style,
-    transform: dragOffset ? `translate(${dragOffset.dx}px, ${dragOffset.dy}px)` : undefined,
-    zIndex: dragOffset ? 500 : style?.zIndex,
-  }
+  const dragRect = dragOffset?.rects?.[card.id]
+  // While dragging, pin the card to the viewport (`position: fixed`) at its captured
+  // origin so it lifts cleanly over the category slots instead of being clipped at
+  // the edge of the scrolling columns row. Stack members keep their visual order.
+  const combinedStyle: React.CSSProperties = dragOffset
+    ? dragRect
+      ? {
+          position: 'fixed',
+          top: dragRect.top,
+          left: dragRect.left,
+          width: dragRect.width,
+          height: dragRect.height,
+          margin: 0,
+          transform: `translate(${dragOffset.dx}px, ${dragOffset.dy}px)`,
+          zIndex: 500 + Math.max(0, dragOffset.cardIds.indexOf(card.id)),
+        }
+      : {
+          ...style,
+          transform: `translate(${dragOffset.dx}px, ${dragOffset.dy}px)`,
+          zIndex: 500 + Math.max(0, dragOffset.cardIds.indexOf(card.id)),
+        }
+    : { ...style }
 
   return (
     <div
@@ -132,6 +168,7 @@ export default function CardView({ card, loc, style }: CardViewProps) {
         .filter(Boolean)
         .join(' ')}
       style={combinedStyle}
+      data-card-id={card.id}
       role="button"
       tabIndex={0}
       aria-label={ariaLabel}
