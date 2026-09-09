@@ -720,6 +720,76 @@
   font-weight: 600;
 }
 
+/* ---------- First-time tutorial ---------- */
+.tutorial-modal {
+  max-width: 360px;
+}
+
+.tutorial-icon {
+  font-size: 40px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+
+.tutorial-body {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink);
+  text-align: left;
+  margin: 8px 0 4px;
+}
+
+.tutorial-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin: 14px 0 16px;
+}
+
+.tutorial-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--paper-deep);
+}
+
+.tutorial-dot-on {
+  background: var(--accent);
+}
+
+.tutorial-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tutorial-actions .primary {
+  padding: 10px;
+  border-radius: 999px;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.tutorial-sub-actions {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+
+.tutorial-sub-actions button {
+  border: none;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 13px;
+  padding: 4px 8px;
+}
+
+.tutorial-skip {
+  text-decoration: underline;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 720px) {
   .game-screen {

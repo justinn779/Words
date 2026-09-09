@@ -49,6 +49,8 @@ interface PersistedShape {
   settings: {
     soundOn: boolean
     animationsOn: boolean
+    /** Set once the first-time tutorial has been shown (or skipped). */
+    tutorialSeen: boolean
   }
   /** Local wall-clock time of the last write — used only for a simple last-write-wins
    * comparison against the cloud copy on sign-in (see docs/firebase.md). */
@@ -92,7 +94,7 @@ function defaultShape(): PersistedShape {
     missionsDaily: { periodKey: getTodayDateString(), progress: {}, claimed: [] },
     missionsWeekly: { periodKey: getWeekKey(), progress: {}, claimed: [] },
     library: defaultLibrary(),
-    settings: { soundOn: true, animationsOn: true },
+    settings: { soundOn: true, animationsOn: true, tutorialSeen: false },
     updatedAt: 0,
   }
 }
@@ -103,7 +105,8 @@ function load(): PersistedShape {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<PersistedShape>
       // Shallow-merge over defaults so fields added in a later version don't crash an older save.
-      return { ...defaultShape(), ...parsed }
+      // `settings` is merged one level deeper so a new toggle isn't dropped by an older save.
+      return { ...defaultShape(), ...parsed, settings: { ...defaultShape().settings, ...parsed.settings } }
     }
   } catch {
     // ignore corrupted/unavailable storage and fall back to defaults
@@ -195,6 +198,8 @@ interface PlayerStore {
   equipLibraryItem: (slotId: string, itemId: string) => void
   toggleSound: () => void
   toggleAnimations: () => void
+  /** Marks the first-time tutorial as shown (or re-arms it, for "replay" from Settings). */
+  setTutorialSeen: (seen: boolean) => void
   /** Wires up Firebase auth (anonymous sign-in + cloud profile merge). Safe to call
    * when Firebase isn't configured — resolves authStatus to 'disabled' and no-ops. */
   initCloud: () => void
@@ -395,6 +400,11 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     commit(get, set)
   },
 
+  setTutorialSeen: (seen) => {
+    set({ settings: { ...get().settings, tutorialSeen: seen } })
+    commit(get, set)
+  },
+
   initCloud: () => {
     if (cloudInitStarted) return
     cloudInitStarted = true
@@ -411,7 +421,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           if (remote && remoteUpdatedAt > local.updatedAt) {
             // The cloud copy is newer (e.g. player continued on another device) —
             // adopt it wholesale. Deliberately simple last-write-wins; see docs/firebase.md.
-            set({ ...defaultShape(), ...remote })
+            set({ ...defaultShape(), ...remote, settings: { ...defaultShape().settings, ...remote.settings } })
             persist(snapshot(get))
           } else {
             // Local is at least as fresh — push it up so the cloud copy catches up.

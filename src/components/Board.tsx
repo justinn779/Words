@@ -4,6 +4,7 @@ import CategorySlots from './CategorySlots'
 import TodoList from './TodoList'
 import HUD from './HUD'
 import WinModal from './WinModal'
+import Tutorial from './Tutorial'
 import { useGameStore } from '../store/gameStore'
 
 export default function Board() {
@@ -39,6 +40,7 @@ export default function Board() {
       </div>
       <TodoList />
       <WinModal />
+      <Tutorial />
     </div>
   )
 }

@@ -15,6 +15,7 @@ export default function Settings({ onBack }: SettingsProps) {
   const settings = usePlayerStore((s) => s.settings)
   const toggleSound = usePlayerStore((s) => s.toggleSound)
   const toggleAnimations = usePlayerStore((s) => s.toggleAnimations)
+  const setTutorialSeen = usePlayerStore((s) => s.setTutorialSeen)
   const authStatus = usePlayerStore((s) => s.authStatus)
   const linkGoogle = usePlayerStore((s) => s.linkGoogle)
 
@@ -37,6 +38,17 @@ export default function Settings({ onBack }: SettingsProps) {
           <span>動畫</span>
           <button type="button" className="settings-toggle" onClick={toggleAnimations}>
             {settings.animationsOn ? '開' : '關'}
+          </button>
+        </li>
+        <li className="settings-row">
+          <span>新手教學</span>
+          <button
+            type="button"
+            className="settings-toggle"
+            onClick={() => setTutorialSeen(false)}
+            disabled={!settings.tutorialSeen}
+          >
+            {settings.tutorialSeen ? '重看' : '下次進關卡顯示'}
           </button>
         </li>
         <li className="settings-row">
