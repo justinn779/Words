@@ -3,18 +3,23 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig({
+// Deployed to GitHub Pages at https://<user>.github.io/Words/, so production
+// assets must be served from the "/Words/" sub-path. Dev/preview stay at "/".
+export default defineConfig(({ mode }) => ({
+  base: mode === 'production' ? '/Words/' : '/',
   plugins: [
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'app-icon.svg', 'app-icon-maskable.svg'],
+      includeAssets: ['app-icon.svg', 'app-icon-maskable.svg', 'apple-touch-icon.png'],
       manifest: {
         name: '文字接龍 Word Solitaire',
         short_name: '文字接龍',
         description: '結合文字分類與 Solitaire 整理牌局的療癒解謎遊戲',
         lang: 'zh-TW',
-        start_url: '/',
+        // Relative so it resolves against the manifest's own path under any base.
+        start_url: '.',
+        scope: '.',
         display: 'standalone',
         background_color: '#f7f1e3',
         theme_color: '#8a5a3b',
@@ -42,4 +47,4 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
   },
-})
+}))
