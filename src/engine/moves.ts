@@ -69,6 +69,20 @@ function canPlaceOnColumn(state: GameState, movingBottomCard: Card, columnIndex:
   return top.cardType === 'word' && top.categoryId === movingBottomCard.categoryId
 }
 
+/** A run capped by its own parked Category Card can target an empty slot as one
+ * combined move: the Category Card activates the slot (exactly like dropping it
+ * there on its own would), and its word run is delivered into that same slot in
+ * the same action — see moveStack. Never valid against an already-active slot:
+ * that would mean this category's card had already been played elsewhere, which
+ * can't happen while this very card is still parked here capping the run. */
+function canOpenAndFillSlot(state: GameState, run: Card[], slotIndex: number): boolean {
+  if (!isCappedByCategoryCard(run)) return false
+  if (state.categorySlots[slotIndex] !== null) return false
+  const wordPart = run.slice(0, -1)
+  const meta = state.categoryMeta[wordPart[0].categoryId]
+  return wordPart.length <= meta.required
+}
+
 function canPlaceOnSlot(state: GameState, cards: Card[], slotIndex: number): boolean {
   const slot = state.categorySlots[slotIndex]
   const bottom = cards[0]
@@ -262,22 +276,32 @@ export function moveStack(
   }
   const column = state.columns[columnIndex]
   const run = column.slice(cardIndex)
-  // A run capped by a parked Category Card can only be relocated to another column —
-  // canPlaceCardsOn's slot check only looks at the bottom (word) card, so without this
-  // it would happily "deliver" the capping Category Card into the slot as if it were
-  // one more word.
-  if (destination.zone === 'slot' && isCappedByCategoryCard(run)) {
-    return { success: false, state, reason: 'capped-stack-cannot-target-slot' }
-  }
-  if (!canPlaceCardsOn(state, run, destination)) {
+  const isCapped = isCappedByCategoryCard(run)
+  // A capped run targeting a slot is only ever valid as the "open + deliver" combo
+  // move below (canPlaceCardsOn's slot check only looks at the bottom word card, so
+  // without this it would happily "deliver" the capping Category Card into an
+  // already-active slot as if it were one more word).
+  if (destination.zone === 'slot' && isCapped) {
+    if (!canOpenAndFillSlot(state, run, destination.index)) {
+      return { success: false, state, reason: 'capped-stack-cannot-target-slot' }
+    }
+  } else if (!canPlaceCardsOn(state, run, destination)) {
     return { success: false, state, reason: 'illegal-destination' }
   }
 
   let next = removeFromSource(state, { zone: 'column', index: columnIndex }, run.length)
 
   if (destination.zone === 'slot') {
-    const slot = next.categorySlots[destination.index]!
-    const collected = slot.collected + run.length
+    const wordPart = isCapped ? run.slice(0, -1) : run
+    const existingSlot = next.categorySlots[destination.index]
+    const slot = isCapped
+      ? (() => {
+          const categoryCard = run[run.length - 1]
+          const meta = next.categoryMeta[categoryCard.categoryId]
+          return { slotIndex: destination.index, categoryId: categoryCard.categoryId, name: meta.name, collected: 0, required: meta.required }
+        })()
+      : existingSlot!
+    const collected = slot.collected + wordPart.length
     const slots = next.categorySlots.slice()
     slots[destination.index] = { ...slot, collected }
     next = { ...next, categorySlots: slots }

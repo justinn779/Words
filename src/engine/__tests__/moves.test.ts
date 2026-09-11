@@ -198,13 +198,35 @@ describe('stacks', () => {
     expect(canMoveStack(state, 0, 0)).toBe(false)
   })
 
-  it('rejects sending a Category-Card-capped run to a slot', () => {
+  it('rejects sending a Category-Card-capped run to an already-active slot', () => {
     const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana'), categoryCard('fruit', 2)]], {
       categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 0, required: 4 }, null],
     })
     const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
     expect(result.success).toBe(false)
     expect(result.state.columns[0]).toHaveLength(3)
+  })
+
+  it('a Category-Card-capped run opens an empty slot and delivers its words in one move', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana'), categoryCard('fruit', 2)]])
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(true)
+    expect(result.state.columns[0]).toHaveLength(0)
+    // required 2 comes from categoryMeta.fruit, not the capping card's own count —
+    // 2 words delivered immediately completes and frees the slot.
+    expect(result.state.categorySlots[0]).toBeNull()
+    expect(result.state.completedCategories).toContain('fruit')
+    expect(result.state.moves).toBe(1)
+  })
+
+  it('rejects a Category-Card-capped run that would overflow the slot it would open', () => {
+    const state = makeState(
+      [[word('fruit', 'apple'), word('fruit', 'banana'), word('fruit', 'cherry'), categoryCard('fruit', 3)]],
+      { categoryMeta: { fruit: { name: '水果', required: 2 }, animal: { name: '動物', required: 2 } } },
+    )
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(false)
+    expect(result.state.columns[0]).toHaveLength(4)
   })
 
   it('delivers a whole same-category run into its active slot in one move', () => {
