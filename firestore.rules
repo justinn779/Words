@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// One profile document per signed-in user (anonymous or Google-linked — see
+// src/firebase/auth.ts and docs/firebase.md). A user may only read/write their own
+// document; nothing else is stored in this project's Firestore.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+  }
+}

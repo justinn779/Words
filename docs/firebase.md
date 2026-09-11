@@ -6,6 +6,39 @@ Firebase project's keys are present at build time (`.env.local` — see
 entirely local-only and **none of this has been exercised against a live Firebase
 project** — treat it as implemented-but-unverified, not battle-tested.
 
+## Turning it on
+
+This is the one part of the project that needs an action only you can take — a real
+Firebase project tied to your own Google account. Claude Code can't create that for
+you (or sign in on your behalf), but everything else is already wired up.
+
+1. **Create the project.** [console.firebase.google.com](https://console.firebase.google.com)
+   → Add project (the free Spark plan is enough for a game this size).
+2. **Enable Authentication.** Build > Authentication > Get started > Sign-in method:
+   turn on **Anonymous** (required — every player gets one on first launch) and
+   **Google** (optional — lets a player link an account across devices).
+3. **Create Firestore.** Build > Firestore Database > Create database (production
+   mode is fine). Then publish this repo's [`firestore.rules`](../firestore.rules)
+   (Firestore > Rules tab, paste and Publish) — it restricts each profile document to
+   its own signed-in owner. Skipping this leaves the default rules in place, which
+   depending on your console choice may allow anyone to read/write any profile.
+4. **Get the web config.** Project settings (⚙️) > General > Your apps > add a Web
+   app (</> icon) > copy the four values from the `firebaseConfig` object shown:
+   `apiKey`, `authDomain`, `projectId`, `appId`. (These aren't secrets by Firebase's
+   own design — access control is the Firestore rules above, not hiding this
+   config — but there's no reason to commit them either.)
+5. **Wire them in:**
+   - Local dev: copy `.env.example` to `.env.local` and paste the four values in.
+   - The deployed GitHub Pages build (`.github/workflows/deploy.yml`): add the same
+     four values as repo secrets — GitHub repo > Settings > Secrets and variables >
+     Actions > New repository secret — named exactly `VITE_FIREBASE_API_KEY`,
+     `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
+     The workflow already reads them; the next push (or a manual re-run) picks them
+     up with no other changes needed.
+6. Rebuild (`npm run build` locally, or just push for the deployed site). Settings in
+   the running app will show "帳號狀態" go from "未啟用雲端同步" to a signed-in state,
+   confirming it's live.
+
 ## Why disabled-by-default is safe
 
 `src/firebase/config.ts` computes `firebaseEnabled` from
