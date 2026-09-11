@@ -76,6 +76,10 @@ export interface TodoItem {
   required: number
   collected: number
   completed: boolean
+  /** False until this category's Category Card has been revealed (face-up on the
+   * table, waste, an active slot, or completed) — before that, the UI shows the
+   * category as a mystery instead of naming it upfront. */
+  revealed: boolean
 }
 
 export type Location =

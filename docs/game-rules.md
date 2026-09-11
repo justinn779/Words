@@ -53,6 +53,11 @@ This is the game's central mechanic:
 - The To-do List (`getTodoList`) is derived from `categoryMeta` + `categorySlots` +
   `completedCategories` — it is not separately stored state, so it can never drift
   out of sync with the board.
+- A level's full category roster isn't shown upfront: an entry stays a "❔ 未知分類"
+  mystery chip (no name, no counts) until its Category Card has actually been seen
+  face-up — on the table, in the waste, in an active slot, or completed. This is
+  `revealed` on `TodoItem`, computed fresh from state each time (an undo that
+  un-reveals a card naturally re-hides its entry too).
 
 ## Deck / Waste
 

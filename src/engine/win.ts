@@ -5,8 +5,27 @@ export function checkWin(state: GameState): boolean {
   return total > 0 && state.completedCategories.length === total
 }
 
+/** Every category whose Category Card the player has actually laid eyes on — face-up
+ * on the table or waste, sitting in an active slot, or already completed. Computed
+ * fresh from `state` each time (nothing extra stored), so it can't drift and an undo
+ * that un-reveals a card naturally re-hides it again. */
+function revealedCategoryIds(state: GameState): Set<string> {
+  const revealed = new Set<string>(state.completedCategories)
+  for (const slot of state.categorySlots) {
+    if (slot) revealed.add(slot.categoryId)
+  }
+  const piles = [...state.columns, state.waste]
+  for (const pile of piles) {
+    for (const card of pile) {
+      if (card.cardType === 'category' && card.faceUp) revealed.add(card.categoryId)
+    }
+  }
+  return revealed
+}
+
 /** Derived, not stored — keeps completion counts in one source of truth (categorySlots + completedCategories). */
 export function getTodoList(state: GameState): TodoItem[] {
+  const revealed = revealedCategoryIds(state)
   return Object.entries(state.categoryMeta).map(([categoryId, meta]) => {
     const completed = state.completedCategories.includes(categoryId)
     const activeSlot = state.categorySlots.find((s) => s?.categoryId === categoryId)
@@ -16,6 +35,7 @@ export function getTodoList(state: GameState): TodoItem[] {
       required: meta.required,
       collected: completed ? meta.required : activeSlot?.collected ?? 0,
       completed,
+      revealed: revealed.has(categoryId),
     }
   })
 }

@@ -584,6 +584,27 @@
   color: var(--ink-soft);
 }
 
+/* A category stays a mystery chip until its Category Card has actually been seen
+ * face-up on the table, waste, an active slot, or completed (src/engine/win.ts). */
+.todo-mystery {
+  border-style: dashed;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
+.todo-mystery .todo-progress {
+  font-style: normal;
+}
+
+.todo-reveal-pulse {
+  animation: todo-reveal-pulse 0.5s ease;
+}
+
+@keyframes todo-reveal-pulse {
+  0% { background: var(--accent-soft); transform: scale(1.04); }
+  100% { background: transparent; transform: scale(1); }
+}
+
 /* ---------- Win modal ---------- */
 .modal-overlay {
   position: fixed;
