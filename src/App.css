@@ -1018,6 +1018,10 @@
   color: var(--ink-soft);
 }
 
+.settings-error {
+  color: var(--danger, #c0392b);
+}
+
 .settings-toggle {
   padding: 6px 16px;
   border-radius: 999px;

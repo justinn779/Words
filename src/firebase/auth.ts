@@ -56,19 +56,61 @@ export function initAuth(onChange: (state: AuthState) => void): () => void {
   }
 }
 
+/** Popup-path failures where a full-page redirect is worth trying instead of just
+ * surfacing the error — a blocked/cancelled popup doesn't mean the user doesn't
+ * want to sign in, just that this browser/setting won't allow the popup. */
+const POPUP_FALLBACK_CODES = new Set([
+  'auth/popup-blocked',
+  'auth/cancelled-popup-request',
+  'auth/operation-not-supported-in-this-environment',
+])
+
 /**
  * Links the current anonymous user to a Google account — never creates a fresh
  * account, so existing local/cloud progress under this uid is preserved. If the
  * Google account is already tied to a different Firebase user, this rejects with
  * `auth/credential-already-in-use`; the caller should offer the player a choice
  * rather than silently discarding either side's progress (see docs/firebase.md).
+ *
+ * Tries a popup first; if the browser won't allow one (POPUP_FALLBACK_CODES —
+ * common in Safari, private/incognito windows, or strict popup-blocker settings),
+ * falls back to a full-page redirect instead of just failing. A redirect navigates
+ * away, so this never resolves in that case — completeGoogleLinkRedirect() picks
+ * up the result after Firebase brings the player back to this page.
  */
 export async function linkGoogleAccount(): Promise<AuthState> {
   const fb = await getFirebase()
   if (!fb || !fb.auth.currentUser) {
     throw new Error('Firebase is not enabled or no user is signed in yet')
   }
-  const { linkWithPopup, GoogleAuthProvider } = await import('firebase/auth')
-  const result = await linkWithPopup(fb.auth.currentUser, new GoogleAuthProvider())
+  const { linkWithPopup, linkWithRedirect, GoogleAuthProvider } = await import('firebase/auth')
+  const provider = new GoogleAuthProvider()
+  try {
+    const result = await linkWithPopup(fb.auth.currentUser, provider)
+    return describeUser(result.user)
+  } catch (err) {
+    const code = (err as { code?: string }).code
+    if (code && POPUP_FALLBACK_CODES.has(code)) {
+      await linkWithRedirect(fb.auth.currentUser, provider) // navigates away — never returns
+    }
+    throw err
+  }
+}
+
+/**
+ * Call once at app startup, after the current user is available, to pick up a
+ * Google link that just completed via linkGoogleAccount()'s redirect fallback.
+ * Resolves to null when there's no pending redirect result — the overwhelmingly
+ * common case (nothing to do here on a normal page load).
+ */
+export async function completeGoogleLinkRedirect(): Promise<AuthState | null> {
+  const fb = await getFirebase()
+  if (!fb) return null
+  const { getRedirectResult } = await import('firebase/auth')
+  const result = await getRedirectResult(fb.auth).catch((err) => {
+    console.error('[firebase] Google redirect link failed', err)
+    return null
+  })
+  if (!result) return null
   return describeUser(result.user)
 }

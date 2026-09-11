@@ -5,7 +5,7 @@ import { ACHIEVEMENTS, type Statistics } from '../data/achievements'
 import { LIBRARY_ITEMS, LIBRARY_SLOTS, getDefaultItemForSlot } from '../data/library'
 import { getTodayDateString, previousDateString } from '../data/dailyChallenge'
 import { firebaseEnabled } from '../firebase/config'
-import { initAuth, linkGoogleAccount, type AuthStatus } from '../firebase/auth'
+import { initAuth, linkGoogleAccount, completeGoogleLinkRedirect, type AuthStatus } from '../firebase/auth'
 import { loadProfile, saveProfile } from '../firebase/sync'
 import { playSfx } from '../audio/sfx'
 
@@ -203,7 +203,10 @@ interface PlayerStore {
   /** Wires up Firebase auth (anonymous sign-in + cloud profile merge). Safe to call
    * when Firebase isn't configured — resolves authStatus to 'disabled' and no-ops. */
   initCloud: () => void
-  linkGoogle: () => Promise<boolean>
+  /** Attempts to link the current anonymous account to a Google account. Resolves
+   * (never rejects) with the outcome so Settings can show *why* a failure happened
+   * instead of just "nothing happened" — see AUTH_LINK_ERROR_LABEL in Settings.tsx. */
+  linkGoogle: () => Promise<{ ok: true } | { ok: false; code?: string }>
 }
 
 const initial = load()
@@ -430,16 +433,26 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
         })
         .catch((err) => console.error('[firebase] initial profile load failed', err))
     })
+
+    // Picks up a Google link that finished via linkGoogleAccount()'s redirect
+    // fallback (the popup was blocked, so the page navigated away and back).
+    // A no-op on any normal page load with no pending redirect.
+    completeGoogleLinkRedirect()
+      .then((state) => {
+        if (state) set({ authStatus: state.status })
+      })
+      .catch((err) => console.error('[firebase] Google redirect link failed', err))
   },
 
   linkGoogle: async () => {
     try {
       const state = await linkGoogleAccount()
       set({ authStatus: state.status })
-      return true
+      return { ok: true }
     } catch (err) {
       console.error('[firebase] Google account link failed', err)
-      return false
+      const code = (err as { code?: string })?.code
+      return { ok: false, code }
     }
   },
 }))
