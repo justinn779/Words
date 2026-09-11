@@ -284,7 +284,11 @@ function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntr
  * whatever's already stored if another player generated this chapter first —
  * every player sees the same chapter once it exists, same principle as Daily
  * Challenge's shared-seed determinism, just generated once instead of computed. */
-export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeoutSeconds: 300 }, async (request) => {
+// 256MiB (the v2 default) isn't enough — src/engine/solver.ts's DFS keeps a
+// visited-state-hash Set that grows with every state it explores, and building
+// a full 5-level curve (verifying each with its own solver run) pushed the
+// default over the limit (263MiB used) and crashed the function outright.
+export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
   }

@@ -62,6 +62,11 @@ export async function requestChapterGeneration(chapterId: string): Promise<Gener
     const call = httpsCallable<{ chapterId: string }, { chapterId: string; levels: LevelConfig[] }>(
       fb.functions,
       'generateNextChapterNow',
+      // The default client timeout (~70s) is shorter than this actually takes
+      // (OpenAI + a solver-verified 5-level curve routinely runs 60-90s+) — match
+      // the server's own onCall({ timeoutSeconds: 300 }) so a real slow run isn't
+      // reported as "failed" while it's still working server-side.
+      { timeout: 300_000 },
     )
     const result = await call({ chapterId })
     cache = { ...cache, [chapterId]: result.data.levels }
@@ -70,6 +75,11 @@ export async function requestChapterGeneration(chapterId: string): Promise<Gener
     const code = (err as { code?: string })?.code
     if (code === 'functions/already-exists') {
       return { ok: false, message: '這個章節正在生成中，請稍後再回來看看' }
+    }
+    if (code === 'functions/deadline-exceeded') {
+      // The call itself timed out, but generation may still finish server-side
+      // and land in Firestore for the next load — see ensureAiChaptersLoaded().
+      return { ok: false, message: '生成時間較長，請稍後重新整理再確認章節是否已完成' }
     }
     console.error('[firebase] generateNextChapterNow failed', err)
     return { ok: false, message: '生成失敗，請稍後再試一次' }
