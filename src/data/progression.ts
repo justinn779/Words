@@ -30,16 +30,21 @@ function allLevels(extraLevels: LevelConfig[] = []): LevelConfig[] {
 }
 
 /** CONTENT_CHAPTER_ORDER plus any AI-generated chapter ids that have content
- * loaded, in extraLevels' chapter-appearance order. */
+ * loaded, ordered by their position in the canonical full roster (CHAPTERS) —
+ * NOT by extraLevels' array order. extraLevels is ultimately sourced from a
+ * Firestore collection query (src/firebase/aiChapters.ts) with no `orderBy`, so
+ * its result order isn't guaranteed; trusting it here previously let e.g.
+ * history-culture end up ahead of science-world whenever Firestore happened to
+ * return them in that order, corrupting the sequential unlock chain (a chapter
+ * generated later could unlock before one generated earlier). */
 export function getContentChapterOrder(extraLevels: LevelConfig[] = []): string[] {
   if (extraLevels.length === 0) return CONTENT_CHAPTER_ORDER
-  const extraIds: string[] = []
+  const extraIds = new Set<string>()
   for (const level of extraLevels) {
-    if (!CONTENT_CHAPTER_ORDER.includes(level.chapterId) && !extraIds.includes(level.chapterId)) {
-      extraIds.push(level.chapterId)
-    }
+    if (!CONTENT_CHAPTER_ORDER.includes(level.chapterId)) extraIds.add(level.chapterId)
   }
-  return [...CONTENT_CHAPTER_ORDER, ...extraIds]
+  const canonicalOrder = CHAPTERS.map((c) => c.id).filter((id) => extraIds.has(id))
+  return [...CONTENT_CHAPTER_ORDER, ...canonicalOrder]
 }
 
 export function getChapterLevels(chapterId: string, extraLevels: LevelConfig[] = []): LevelConfig[] {
