@@ -4,6 +4,8 @@ import { usePlayerStore } from '../store/playerStore'
 import { LEVELS } from '../data/levels'
 import { ACHIEVEMENTS } from '../data/achievements'
 import { LIBRARY_ITEMS } from '../data/library'
+import { CONTENT_CHAPTER_ORDER, getChapterLevels, isChapterUnlocked } from '../data/progression'
+import { CHAPTERS } from '../data/chapters'
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -34,12 +36,24 @@ export default function WinModal() {
   const startDailyLevel = useGameStore((s) => s.startDailyLevel)
   const exitLevel = useGameStore((s) => s.exitLevel)
   const animationsOn = usePlayerStore((s) => s.settings.animationsOn)
+  // recordWin() has already run by the time this renders (gameStore.finalizeMove calls it
+  // before setting won/score), so this reflects the just-earned stars from this very win.
+  const levelRecords = usePlayerStore((s) => s.levelRecords)
 
   if (!game || game.status !== 'won' || !score || !levelConfig) return null
 
   const chapterLevels = LEVELS.filter((l) => l.chapterId === levelConfig.chapterId)
   const levelIndex = chapterLevels.findIndex((l) => l.id === levelConfig.id)
   const nextLevel = !dailyDate ? chapterLevels[levelIndex + 1] : undefined
+
+  // Finished a chapter's last level: offer to jump straight into the next one, if it
+  // has content and just got unlocked (or already was).
+  const chapterOrderIndex = CONTENT_CHAPTER_ORDER.indexOf(levelConfig.chapterId)
+  const nextChapterId = !dailyDate && !nextLevel && chapterOrderIndex >= 0 ? CONTENT_CHAPTER_ORDER[chapterOrderIndex + 1] : undefined
+  const nextChapterFirstLevel = nextChapterId ? getChapterLevels(nextChapterId)[0] : undefined
+  const nextChapterUnlocked = nextChapterId ? isChapterUnlocked(nextChapterId, levelRecords) : false
+  const nextChapterTitle = nextChapterId ? CHAPTERS.find((c) => c.id === nextChapterId)?.title : undefined
+  const showNextChapter = Boolean(nextChapterFirstLevel && nextChapterUnlocked)
 
   const unlockedAchievements = (winUnlocks?.achievementIds ?? [])
     .map((id) => ACHIEVEMENTS.find((a) => a.id === id))
@@ -139,6 +153,11 @@ export default function WinModal() {
               {nextLevel && (
                 <button type="button" className="primary" onClick={() => startLevel(nextLevel.id)}>
                   下一關
+                </button>
+              )}
+              {showNextChapter && nextChapterFirstLevel && (
+                <button type="button" className="primary" onClick={() => startLevel(nextChapterFirstLevel.id)}>
+                  下一章節：{nextChapterTitle ?? ''}
                 </button>
               )}
               <button type="button" onClick={() => startLevel(levelConfig.id)}>
