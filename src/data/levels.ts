@@ -21,11 +21,11 @@ export const LEVELS: LevelConfig[] = [
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "clothing": 4,
-      "tool": 4,
+      "clothing": 3,
+      "tool": 5,
       "drink": 4
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -36,20 +36,20 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "daily-life",
     "difficulty": "easy",
     "categoryIds": [
-      "color",
+      "occupation",
       "animal",
-      "stationery"
+      "color"
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "color": 4,
-      "animal": 4,
-      "stationery": 4
+      "occupation": 4,
+      "animal": 5,
+      "color": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -60,8 +60,8 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "daily-life",
     "difficulty": "easy",
     "categoryIds": [
+      "occupation",
       "furniture",
-      "color",
       "stationery"
     ],
     "columnCount": 4,
@@ -69,11 +69,11 @@ export const LEVELS: LevelConfig[] = [
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "furniture": 4,
-      "color": 4,
-      "stationery": 4
+      "occupation": 4,
+      "furniture": 3,
+      "stationery": 5
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -85,21 +85,21 @@ export const LEVELS: LevelConfig[] = [
     "difficulty": "normal",
     "categoryIds": [
       "fruit",
+      "occupation",
       "vehicle",
-      "furniture",
-      "stationery"
+      "animal"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "fruit": 5,
-      "vehicle": 5,
-      "furniture": 5,
-      "stationery": 5
+      "fruit": 4,
+      "occupation": 6,
+      "vehicle": 4,
+      "animal": 6
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -110,22 +110,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "daily-life",
     "difficulty": "normal",
     "categoryIds": [
-      "vehicle",
-      "clothing",
-      "stationery",
-      "animal"
+      "dessert",
+      "occupation",
+      "animal",
+      "stationery"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "vehicle": 5,
-      "clothing": 5,
-      "stationery": 5,
-      "animal": 5
+      "dessert": 6,
+      "occupation": 6,
+      "animal": 4,
+      "stationery": 4
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -136,22 +136,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "daily-life",
     "difficulty": "normal",
     "categoryIds": [
-      "stationery",
+      "dessert",
       "occupation",
-      "clothing",
-      "vehicle"
+      "color",
+      "appliance"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "stationery": 5,
-      "occupation": 5,
-      "clothing": 5,
-      "vehicle": 5
+      "dessert": 4,
+      "occupation": 6,
+      "color": 6,
+      "appliance": 4
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -160,52 +160,54 @@ export const LEVELS: LevelConfig[] = [
   {
     "id": "daily-life-07",
     "chapterId": "daily-life",
-    "difficulty": "normal",
-    "categoryIds": [
-      "stationery",
-      "appliance",
-      "furniture",
-      "tool"
-    ],
-    "columnCount": 5,
-    "categorySlotCount": 2,
-    "deckEnabled": true,
-    "deckSize": 6,
-    "categoryWordCounts": {
-      "stationery": 5,
-      "appliance": 5,
-      "furniture": 5,
-      "tool": 5
-    },
-    "targetThreeStarMoves": 31,
-    "targetTwoStarMoves": 43,
-    "targetThreeStarTime": 161,
-    "targetTwoStarTime": 240,
-    "seed": "daily-life-07-s0"
-  },
-  {
-    "id": "daily-life-08",
-    "chapterId": "daily-life",
     "difficulty": "hard",
     "categoryIds": [
-      "animal",
-      "clothing",
-      "dessert",
-      "furniture",
-      "occupation"
+      "appliance",
+      "vehicle",
+      "occupation",
+      "stationery",
+      "dessert"
     ],
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
     "deckSize": 9,
     "categoryWordCounts": {
-      "animal": 6,
-      "clothing": 6,
-      "dessert": 6,
-      "furniture": 6,
-      "occupation": 6
+      "appliance": 6,
+      "vehicle": 7,
+      "occupation": 5,
+      "stationery": 5,
+      "dessert": 7
     },
-    "targetThreeStarMoves": 46,
+    "targetThreeStarMoves": 53,
+    "targetTwoStarMoves": 63,
+    "targetThreeStarTime": 235,
+    "targetTwoStarTime": 350,
+    "seed": "daily-life-07-s3"
+  },
+  {
+    "id": "daily-life-08",
+    "chapterId": "daily-life",
+    "difficulty": "hard",
+    "categoryIds": [
+      "stationery",
+      "color",
+      "fruit",
+      "vehicle",
+      "tool"
+    ],
+    "columnCount": 6,
+    "categorySlotCount": 3,
+    "deckEnabled": true,
+    "deckSize": 9,
+    "categoryWordCounts": {
+      "stationery": 5,
+      "color": 7,
+      "fruit": 7,
+      "vehicle": 6,
+      "tool": 5
+    },
+    "targetThreeStarMoves": 53,
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
@@ -226,10 +228,10 @@ export const LEVELS: LevelConfig[] = [
     "deckSize": 0,
     "categoryWordCounts": {
       "insect": 4,
-      "flower": 4,
-      "scenery": 4
+      "flower": 5,
+      "scenery": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -240,20 +242,20 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "natural-world",
     "difficulty": "easy",
     "categoryIds": [
-      "scenery",
-      "weather",
-      "bird"
+      "insect",
+      "planet",
+      "scenery"
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "scenery": 4,
-      "weather": 4,
-      "bird": 4
+      "insect": 5,
+      "planet": 4,
+      "scenery": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -264,22 +266,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "natural-world",
     "difficulty": "normal",
     "categoryIds": [
-      "planet",
       "bird",
-      "weather",
-      "scenery"
+      "marine",
+      "scenery",
+      "insect"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "planet": 5,
-      "bird": 5,
-      "weather": 5,
-      "scenery": 5
+      "bird": 6,
+      "marine": 4,
+      "scenery": 4,
+      "insect": 6
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -290,22 +292,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "natural-world",
     "difficulty": "normal",
     "categoryIds": [
-      "weather",
+      "marine",
       "insect",
       "bird",
-      "scenery"
+      "flower"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "weather": 5,
-      "insect": 5,
-      "bird": 5,
-      "scenery": 5
+      "marine": 4,
+      "insect": 6,
+      "bird": 4,
+      "flower": 6
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -314,27 +316,29 @@ export const LEVELS: LevelConfig[] = [
   {
     "id": "natural-world-05",
     "chapterId": "natural-world",
-    "difficulty": "normal",
+    "difficulty": "hard",
     "categoryIds": [
-      "flower",
-      "bird",
+      "scenery",
       "insect",
+      "marine",
+      "weather",
       "planet"
     ],
-    "columnCount": 5,
-    "categorySlotCount": 2,
+    "columnCount": 6,
+    "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 9,
     "categoryWordCounts": {
-      "flower": 5,
-      "bird": 5,
-      "insect": 5,
-      "planet": 5
+      "scenery": 5,
+      "insect": 6,
+      "marine": 5,
+      "weather": 7,
+      "planet": 7
     },
-    "targetThreeStarMoves": 31,
-    "targetTwoStarMoves": 43,
-    "targetThreeStarTime": 161,
-    "targetTwoStarTime": 240,
+    "targetThreeStarMoves": 53,
+    "targetTwoStarMoves": 63,
+    "targetThreeStarTime": 235,
+    "targetTwoStarTime": 350,
     "seed": "natural-world-05-s0"
   },
   {
@@ -342,10 +346,10 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "natural-world",
     "difficulty": "hard",
     "categoryIds": [
-      "marine",
-      "flower",
-      "bird",
       "scenery",
+      "insect",
+      "bird",
+      "flower",
       "weather"
     ],
     "columnCount": 6,
@@ -353,17 +357,17 @@ export const LEVELS: LevelConfig[] = [
     "deckEnabled": true,
     "deckSize": 9,
     "categoryWordCounts": {
-      "marine": 6,
-      "flower": 6,
+      "scenery": 7,
+      "insect": 7,
       "bird": 6,
-      "scenery": 6,
-      "weather": 6
+      "flower": 5,
+      "weather": 5
     },
-    "targetThreeStarMoves": 46,
+    "targetThreeStarMoves": 53,
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "natural-world-06-s1"
+    "seed": "natural-world-06-s0"
   },
   {
     "id": "food-culture-01",
@@ -380,10 +384,10 @@ export const LEVELS: LevelConfig[] = [
     "deckSize": 0,
     "categoryWordCounts": {
       "fruit": 4,
-      "dessert": 4,
-      "festival": 4
+      "dessert": 5,
+      "festival": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -396,18 +400,18 @@ export const LEVELS: LevelConfig[] = [
     "categoryIds": [
       "festival",
       "drink",
-      "dessert"
+      "fruit"
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "festival": 4,
+      "festival": 3,
       "drink": 4,
-      "dessert": 4
+      "fruit": 5
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -418,22 +422,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "food-culture",
     "difficulty": "normal",
     "categoryIds": [
-      "cuisine",
       "drink",
-      "festival",
-      "dessert"
+      "cuisine",
+      "dessert",
+      "festival"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "cuisine": 5,
-      "drink": 5,
-      "festival": 5,
-      "dessert": 5
+      "drink": 6,
+      "cuisine": 6,
+      "dessert": 4,
+      "festival": 4
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -444,22 +448,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "food-culture",
     "difficulty": "normal",
     "categoryIds": [
-      "drink",
-      "cuisine",
       "dessert",
-      "festival"
+      "cuisine",
+      "fruit",
+      "drink"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "drink": 5,
-      "cuisine": 5,
-      "dessert": 5,
-      "festival": 5
+      "dessert": 6,
+      "cuisine": 4,
+      "fruit": 6,
+      "drink": 4
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -468,28 +472,30 @@ export const LEVELS: LevelConfig[] = [
   {
     "id": "food-culture-05",
     "chapterId": "food-culture",
-    "difficulty": "normal",
+    "difficulty": "hard",
     "categoryIds": [
-      "fruit",
-      "drink",
+      "cuisine",
       "dessert",
+      "drink",
+      "fruit",
       "festival"
     ],
-    "columnCount": 5,
-    "categorySlotCount": 2,
+    "columnCount": 6,
+    "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 9,
     "categoryWordCounts": {
-      "fruit": 5,
-      "drink": 5,
+      "cuisine": 5,
       "dessert": 5,
-      "festival": 5
+      "drink": 7,
+      "fruit": 7,
+      "festival": 6
     },
-    "targetThreeStarMoves": 31,
-    "targetTwoStarMoves": 43,
-    "targetThreeStarTime": 161,
-    "targetTwoStarTime": 240,
-    "seed": "food-culture-05-s0"
+    "targetThreeStarMoves": 53,
+    "targetTwoStarMoves": 63,
+    "targetThreeStarTime": 235,
+    "targetTwoStarTime": 350,
+    "seed": "food-culture-05-s1"
   },
   {
     "id": "food-culture-06",
@@ -497,27 +503,27 @@ export const LEVELS: LevelConfig[] = [
     "difficulty": "hard",
     "categoryIds": [
       "cuisine",
-      "fruit",
-      "festival",
       "drink",
-      "dessert"
+      "fruit",
+      "dessert",
+      "festival"
     ],
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
     "deckSize": 9,
     "categoryWordCounts": {
-      "cuisine": 6,
-      "fruit": 6,
-      "festival": 6,
-      "drink": 6,
-      "dessert": 6
+      "cuisine": 5,
+      "drink": 7,
+      "fruit": 5,
+      "dessert": 6,
+      "festival": 7
     },
-    "targetThreeStarMoves": 46,
+    "targetThreeStarMoves": 53,
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "food-culture-06-s2"
+    "seed": "food-culture-06-s4"
   },
   {
     "id": "world-travel-01",
@@ -534,10 +540,10 @@ export const LEVELS: LevelConfig[] = [
     "deckSize": 0,
     "categoryWordCounts": {
       "country": 4,
-      "cuisine": 4,
-      "city": 4
+      "cuisine": 5,
+      "city": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -548,20 +554,20 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "world-travel",
     "difficulty": "easy",
     "categoryIds": [
-      "sport",
-      "cuisine",
-      "vehicle"
+      "occupation",
+      "city",
+      "cuisine"
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "sport": 4,
-      "cuisine": 4,
-      "vehicle": 4
+      "occupation": 5,
+      "city": 4,
+      "cuisine": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -572,22 +578,22 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "world-travel",
     "difficulty": "normal",
     "categoryIds": [
-      "cuisine",
       "city",
       "vehicle",
-      "sport"
+      "country",
+      "cuisine"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "cuisine": 5,
-      "city": 5,
-      "vehicle": 5,
-      "sport": 5
+      "city": 6,
+      "vehicle": 4,
+      "country": 6,
+      "cuisine": 4
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -598,9 +604,9 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "world-travel",
     "difficulty": "normal",
     "categoryIds": [
-      "sport",
-      "vehicle",
+      "occupation",
       "city",
+      "cuisine",
       "country"
     ],
     "columnCount": 5,
@@ -608,12 +614,12 @@ export const LEVELS: LevelConfig[] = [
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "sport": 5,
-      "vehicle": 5,
-      "city": 5,
-      "country": 5
+      "occupation": 6,
+      "city": 4,
+      "cuisine": 4,
+      "country": 6
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -622,56 +628,58 @@ export const LEVELS: LevelConfig[] = [
   {
     "id": "world-travel-05",
     "chapterId": "world-travel",
-    "difficulty": "normal",
-    "categoryIds": [
-      "occupation",
-      "country",
-      "city",
-      "cuisine"
-    ],
-    "columnCount": 5,
-    "categorySlotCount": 2,
-    "deckEnabled": true,
-    "deckSize": 6,
-    "categoryWordCounts": {
-      "occupation": 5,
-      "country": 5,
-      "city": 5,
-      "cuisine": 5
-    },
-    "targetThreeStarMoves": 31,
-    "targetTwoStarMoves": 43,
-    "targetThreeStarTime": 161,
-    "targetTwoStarTime": 240,
-    "seed": "world-travel-05-s0"
-  },
-  {
-    "id": "world-travel-06",
-    "chapterId": "world-travel",
     "difficulty": "hard",
     "categoryIds": [
-      "country",
-      "occupation",
-      "vehicle",
       "cuisine",
-      "sport"
+      "vehicle",
+      "country",
+      "city",
+      "occupation"
     ],
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
     "deckSize": 9,
     "categoryWordCounts": {
-      "country": 6,
-      "occupation": 6,
+      "cuisine": 5,
       "vehicle": 6,
-      "cuisine": 6,
-      "sport": 6
+      "country": 7,
+      "city": 5,
+      "occupation": 7
     },
-    "targetThreeStarMoves": 46,
+    "targetThreeStarMoves": 53,
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "world-travel-06-s2"
+    "seed": "world-travel-05-s2"
+  },
+  {
+    "id": "world-travel-06",
+    "chapterId": "world-travel",
+    "difficulty": "hard",
+    "categoryIds": [
+      "cuisine",
+      "occupation",
+      "sport",
+      "city",
+      "vehicle"
+    ],
+    "columnCount": 6,
+    "categorySlotCount": 3,
+    "deckEnabled": true,
+    "deckSize": 9,
+    "categoryWordCounts": {
+      "cuisine": 5,
+      "occupation": 7,
+      "sport": 6,
+      "city": 7,
+      "vehicle": 5
+    },
+    "targetThreeStarMoves": 53,
+    "targetTwoStarMoves": 63,
+    "targetThreeStarTime": 235,
+    "targetTwoStarTime": 350,
+    "seed": "world-travel-06-s1"
   },
   {
     "id": "arts-entertainment-01",
@@ -687,11 +695,11 @@ export const LEVELS: LevelConfig[] = [
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "architecture": 4,
+      "architecture": 5,
       "musicGenre": 4,
-      "filmGenre": 4
+      "filmGenre": 3
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -703,7 +711,7 @@ export const LEVELS: LevelConfig[] = [
     "difficulty": "easy",
     "categoryIds": [
       "instrument",
-      "filmGenre",
+      "architecture",
       "musicGenre"
     ],
     "columnCount": 4,
@@ -711,11 +719,11 @@ export const LEVELS: LevelConfig[] = [
     "deckEnabled": false,
     "deckSize": 0,
     "categoryWordCounts": {
-      "instrument": 4,
-      "filmGenre": 4,
+      "instrument": 5,
+      "architecture": 3,
       "musicGenre": 4
     },
-    "targetThreeStarMoves": 20,
+    "targetThreeStarMoves": 23,
     "targetTwoStarMoves": 27,
     "targetThreeStarTime": 101,
     "targetTwoStarTime": 150,
@@ -728,20 +736,20 @@ export const LEVELS: LevelConfig[] = [
     "categoryIds": [
       "filmGenre",
       "instrument",
-      "architecture",
-      "musicGenre"
+      "musicGenre",
+      "architecture"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "filmGenre": 5,
-      "instrument": 5,
-      "architecture": 5,
-      "musicGenre": 5
+      "filmGenre": 6,
+      "instrument": 6,
+      "musicGenre": 4,
+      "architecture": 4
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
@@ -752,25 +760,51 @@ export const LEVELS: LevelConfig[] = [
     "chapterId": "arts-entertainment",
     "difficulty": "normal",
     "categoryIds": [
-      "musicGenre",
+      "filmGenre",
       "instrument",
       "architecture",
-      "filmGenre"
+      "musicGenre"
     ],
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
     "deckSize": 6,
     "categoryWordCounts": {
-      "musicGenre": 5,
-      "instrument": 5,
-      "architecture": 5,
-      "filmGenre": 5
+      "filmGenre": 6,
+      "instrument": 4,
+      "architecture": 4,
+      "musicGenre": 6
     },
-    "targetThreeStarMoves": 31,
+    "targetThreeStarMoves": 36,
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
     "seed": "arts-entertainment-04-s0"
+  },
+  {
+    "id": "arts-entertainment-05",
+    "chapterId": "arts-entertainment",
+    "difficulty": "hard",
+    "categoryIds": [
+      "filmGenre",
+      "musicGenre",
+      "architecture",
+      "instrument"
+    ],
+    "columnCount": 6,
+    "categorySlotCount": 3,
+    "deckEnabled": true,
+    "deckSize": 9,
+    "categoryWordCounts": {
+      "filmGenre": 7,
+      "musicGenre": 7,
+      "architecture": 5,
+      "instrument": 5
+    },
+    "targetThreeStarMoves": 42,
+    "targetTwoStarMoves": 50,
+    "targetThreeStarTime": 188,
+    "targetTwoStarTime": 280,
+    "seed": "arts-entertainment-05-s0"
   }
 ]

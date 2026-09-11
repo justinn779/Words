@@ -6,7 +6,7 @@
 
 import type { Difficulty, LevelConfig } from '../engine/types'
 import { CATEGORIES } from './categories'
-import { DIFFICULTY_SHAPE, WORDS_PER_CATEGORY, cardCountFor, estimateTargets } from './difficultyShapes'
+import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets } from './difficultyShapes'
 import { createRng, shuffle } from '../engine/rng'
 
 export const DAILY_DIFFICULTIES: Difficulty[] = ['easy', 'normal', 'hard']
@@ -34,7 +34,8 @@ export function buildDailyLevelConfig(date: string, difficulty: Difficulty): Lev
     rng,
   ).slice(0, shape.categoryCount)
 
-  const targets = estimateTargets(cardCountFor(difficulty, categoryIds.length))
+  const categoryWordCounts = varyWordCounts(rng, difficulty, categoryIds)
+  const targets = estimateTargets(totalCardCount(categoryWordCounts))
 
   return {
     id: `daily-${date}-${difficulty}`,
@@ -45,7 +46,7 @@ export function buildDailyLevelConfig(date: string, difficulty: Difficulty): Lev
     categorySlotCount: shape.slotCount,
     deckEnabled: shape.deckEnabled,
     deckSize: shape.deckSize,
-    categoryWordCounts: Object.fromEntries(categoryIds.map((c) => [c, WORDS_PER_CATEGORY[difficulty]])),
+    categoryWordCounts,
     ...targets,
     seed: `daily-${date}-${difficulty}`,
   }
