@@ -4,6 +4,7 @@ import {
   createGame,
   moveCard,
   moveStack,
+  canMoveStack,
   drawDeckCard,
   recycleDeck,
   undo as engineUndo,
@@ -116,11 +117,10 @@ function tryPickSelection(game: GameState, columnIndex: number, cardIndex: numbe
   if (isRunTop(game, columnIndex, cardIndex)) {
     return { kind: 'column', columnIndex, cardIndex, cardId: card.id }
   }
-  // Only a contiguous same-category word run (see engine canMoveStack) can be picked mid-column.
-  const run = column.slice(cardIndex)
-  const categoryId = run[0].categoryId
-  const isRun = run.every((c) => c.faceUp && c.cardType === 'word' && c.categoryId === categoryId)
-  return isRun ? { kind: 'column', columnIndex, cardIndex, cardId: card.id } : null
+  // Delegate to the engine's canMoveStack so "what counts as a pickable stack" (a
+  // same-category word run, optionally capped by that category's parked Category
+  // Card) lives in exactly one place.
+  return canMoveStack(game, columnIndex, cardIndex) ? { kind: 'column', columnIndex, cardIndex, cardId: card.id } : null
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -338,8 +338,13 @@ function attemptMoveSelection(
       : moveStack(game, selection.columnIndex, selection.cardIndex, destination)
 
   if (!result.success) {
-    sfx('invalid')
-    flashInvalid(set, selection.cardId)
+    // Dropping a card/stack back onto the column it already sits on is a no-op,
+    // not a mistake — snap it back silently instead of shaking/beeping at the
+    // player for putting a card down where they picked it up.
+    if (result.reason !== 'same-position') {
+      sfx('invalid')
+      flashInvalid(set, selection.cardId)
+    }
     set({ selection: null })
     return false
   }

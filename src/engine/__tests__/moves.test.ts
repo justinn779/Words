@@ -176,6 +176,37 @@ describe('stacks', () => {
     expect(canMoveStack(state, 0, 0)).toBe(false)
   })
 
+  it('dropping a stack back onto its own column is a free no-op, not a move', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana')], []])
+    const result = moveStack(state, 0, 0, { zone: 'column', index: 0 })
+    expect(result.success).toBe(false)
+    expect(result.reason).toBe('same-position')
+    expect(result.state).toBe(state)
+  })
+
+  it('a word run capped by its own parked Category Card moves as one unit', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana'), categoryCard('fruit', 2)], []])
+    expect(canMoveStack(state, 0, 0)).toBe(true)
+    const result = moveStack(state, 0, 0, { zone: 'column', index: 1 })
+    expect(result.success).toBe(true)
+    expect(result.state.columns[1].map((c) => c.id)).toEqual(['word-fruit-apple', 'word-fruit-banana', 'cat-fruit'])
+    expect(result.state.columns[0]).toHaveLength(0)
+  })
+
+  it('a capping Category Card must match the word run underneath', () => {
+    const state = makeState([[word('fruit', 'apple'), categoryCard('animal', 2)]])
+    expect(canMoveStack(state, 0, 0)).toBe(false)
+  })
+
+  it('rejects sending a Category-Card-capped run to a slot', () => {
+    const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana'), categoryCard('fruit', 2)]], {
+      categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 0, required: 4 }, null],
+    })
+    const result = moveStack(state, 0, 0, { zone: 'slot', index: 0 })
+    expect(result.success).toBe(false)
+    expect(result.state.columns[0]).toHaveLength(3)
+  })
+
   it('delivers a whole same-category run into its active slot in one move', () => {
     const state = makeState([[word('fruit', 'apple'), word('fruit', 'banana')]], {
       categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 0, required: 4 }, null],

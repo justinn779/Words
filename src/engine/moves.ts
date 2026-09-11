@@ -26,17 +26,33 @@ export function canMoveCard(state: GameState, cardId: string): boolean {
 }
 
 /**
- * A stack move takes every card from `cardIndex` to the column top. All of them must be
- * face-up word cards of the same category — a category card can never be part of a run,
- * and a face-down card can never be dragged along underneath one.
+ * A stack move takes every card from `cardIndex` to the column top: a face-up
+ * same-category word run, optionally capped by that category's own Category Card
+ * parked on top (game-rules.md — a Category Card can rest on a matching word
+ * stack). Capping lets the whole parked pile relocate in one drag instead of
+ * needing a separate move for the Category Card first. A face-down card
+ * underneath a run is never included; a capping Category Card is never itself
+ * capped by another card (it's always the top).
  */
 export function canMoveStack(state: GameState, columnIndex: number, cardIndex: number): boolean {
   const column = state.columns[columnIndex]
   if (!column || cardIndex < 0 || cardIndex >= column.length) return false
   const run = column.slice(cardIndex)
   if (run.length === 0) return false
-  const categoryId = run[0].categoryId
-  return run.every((c) => c.faceUp && c.cardType === 'word' && c.categoryId === categoryId)
+  const top = run[run.length - 1]
+  const isCapped = run.length > 1 && top.cardType === 'category'
+  const wordPart = isCapped ? run.slice(0, -1) : run
+  if (wordPart.length === 0) return false
+  const categoryId = wordPart[0].categoryId
+  const wordPartOk = wordPart.every((c) => c.faceUp && c.cardType === 'word' && c.categoryId === categoryId)
+  if (!wordPartOk) return false
+  return !isCapped || (top.faceUp && top.categoryId === categoryId)
+}
+
+/** True if `run` (as returned by slicing a column for a stack move) ends in a
+ * Category Card parked on top of its word run, rather than being pure word cards. */
+function isCappedByCategoryCard(run: Card[]): boolean {
+  return run.length > 1 && run[run.length - 1].cardType === 'category'
 }
 
 function canPlaceOnColumn(state: GameState, movingBottomCard: Card, columnIndex: number): boolean {
@@ -105,6 +121,14 @@ function appendToColumn(state: GameState, columnIndex: number, cards: Card[]): G
   return { ...state, columns }
 }
 
+/** Dropping a card/stack back onto the exact column it's already the top of is a
+ * no-op (same order, same face-up state) that should never cost a move — a drag
+ * that starts past the threshold but ends over its own column is the common way
+ * this happens. */
+function isNoOpColumnDrop(location: Location, destination: Location): boolean {
+  return location.zone === 'column' && destination.zone === 'column' && destination.index === location.index
+}
+
 /** Category-card-specific move: park it on a matching word stack/empty column, or activate a slot. */
 export function moveCategoryCard(state: GameState, cardId: string, destination: Location): MoveResult {
   const found = findCard(state, cardId)
@@ -113,6 +137,7 @@ export function moveCategoryCard(state: GameState, cardId: string, destination: 
   }
   if (!canMoveCard(state, cardId)) return { success: false, state, reason: 'card-not-movable' }
   const { card, location } = found
+  if (isNoOpColumnDrop(location, destination)) return { success: false, state, reason: 'same-position' }
   if (!canPlaceCardsOn(state, [card], destination)) {
     return { success: false, state, reason: 'illegal-destination' }
   }
@@ -201,6 +226,7 @@ export function moveCard(state: GameState, cardId: string, destination: Location
 
   if (!canMoveCard(state, cardId)) return { success: false, state, reason: 'card-not-movable' }
   const { card, location } = found
+  if (isNoOpColumnDrop(location, destination)) return { success: false, state, reason: 'same-position' }
   if (!canPlaceCardsOn(state, [card], destination)) {
     return { success: false, state, reason: 'illegal-destination' }
   }
@@ -214,8 +240,10 @@ export function moveCard(state: GameState, cardId: string, destination: Location
 }
 
 /**
- * Moves a whole same-category run of word cards from one column onto another
- * column/empty space, or delivers it into that category's active slot in one go.
+ * Moves a whole same-category run of word cards — optionally capped by that
+ * category's parked Category Card, see canMoveStack — from one column onto another
+ * column/empty space, or (an uncapped run only) delivers it into that category's
+ * active slot in one go.
  */
 export function moveStack(
   state: GameState,
@@ -229,8 +257,18 @@ export function moveStack(
   if (!canMoveStack(state, columnIndex, cardIndex)) {
     return { success: false, state, reason: 'not-a-movable-stack' }
   }
+  if (isNoOpColumnDrop({ zone: 'column', index: columnIndex }, destination)) {
+    return { success: false, state, reason: 'same-position' }
+  }
   const column = state.columns[columnIndex]
   const run = column.slice(cardIndex)
+  // A run capped by a parked Category Card can only be relocated to another column —
+  // canPlaceCardsOn's slot check only looks at the bottom (word) card, so without this
+  // it would happily "deliver" the capping Category Card into the slot as if it were
+  // one more word.
+  if (destination.zone === 'slot' && isCappedByCategoryCard(run)) {
+    return { success: false, state, reason: 'capped-stack-cannot-target-slot' }
+  }
   if (!canPlaceCardsOn(state, run, destination)) {
     return { success: false, state, reason: 'illegal-destination' }
   }
