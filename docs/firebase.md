@@ -1,74 +1,68 @@
-# Firebase (Phase 5 — built, but off by default)
+# Firebase（第 5 階段 — 已完成開發，但預設關閉）
 
-The code is complete and wired into `playerStore`, but it only activates when a real
-Firebase project's keys are present at build time (`.env.local` — see
-`.env.example`). This repo ships with none configured, so by default the game runs
-entirely local-only and **none of this has been exercised against a live Firebase
-project** — treat it as implemented-but-unverified, not battle-tested.
+程式碼已經寫完並接進 `playerStore`，但只有在建置時環境變數裡有一組真正的 Firebase
+專案金鑰（`.env.local`，格式見 `.env.example`）才會啟用。這個 repo 本身沒有附上任何
+金鑰，所以預設情況下遊戲完全走本機儲存，而且**目前從沒對著一個真正上線的 Firebase
+專案跑過**——把它當作「功能已寫好但未經實測」，而不是「久經考驗」。
 
-## Turning it on
+## 怎麼打開它
 
-This is the one part of the project that needs an action only you can take — a real
-Firebase project tied to your own Google account. Claude Code can't create that for
-you (or sign in on your behalf), but everything else is already wired up.
+這是整個專案裡唯一一個必須由你自己動手的部分——需要一個綁在你自己 Google 帳號下的
+真正 Firebase 專案。Claude Code 沒辦法幫你建立這個專案（也不該代替你登入），但除此
+之外的其他部分都已經接好了。
 
-1. **Create the project.** [console.firebase.google.com](https://console.firebase.google.com)
-   → Add project (the free Spark plan is enough for a game this size).
-2. **Enable Authentication.** Build > Authentication > Get started > Sign-in method:
-   turn on **Anonymous** (required — every player gets one on first launch) and
-   **Google** (optional — lets a player link an account across devices).
-3. **Create Firestore.** Build > Firestore Database > Create database (production
-   mode is fine). Then publish this repo's [`firestore.rules`](../firestore.rules)
-   (Firestore > Rules tab, paste and Publish) — it restricts each profile document to
-   its own signed-in owner. Skipping this leaves the default rules in place, which
-   depending on your console choice may allow anyone to read/write any profile.
-4. **Get the web config.** Project settings (⚙️) > General > Your apps > add a Web
-   app (</> icon) > copy the four values from the `firebaseConfig` object shown:
-   `apiKey`, `authDomain`, `projectId`, `appId`. (These aren't secrets by Firebase's
-   own design — access control is the Firestore rules above, not hiding this
-   config — but there's no reason to commit them either.)
-5. **Wire them in:**
-   - Local dev: copy `.env.example` to `.env.local` and paste the four values in.
-   - The deployed GitHub Pages build (`.github/workflows/deploy.yml`): add the same
-     four values as repo secrets — GitHub repo > Settings > Secrets and variables >
-     Actions > New repository secret — named exactly `VITE_FIREBASE_API_KEY`,
-     `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`.
-     The workflow already reads them; the next push (or a manual re-run) picks them
-     up with no other changes needed.
-6. Rebuild (`npm run build` locally, or just push for the deployed site). Settings in
-   the running app will show "帳號狀態" go from "未啟用雲端同步" to a signed-in state,
-   confirming it's live.
+1. **建立專案。** 到 [console.firebase.google.com](https://console.firebase.google.com)
+   → 新增專案（免費的 Spark 方案對這種規模的遊戲就夠用了）。
+2. **開啟驗證功能（Authentication）。** Build > Authentication > 開始使用 > 登入方式：
+   打開**匿名登入（Anonymous）**（必要——每個玩家第一次啟動遊戲時都會拿到一個匿名帳號）
+   和**Google 登入**（選用——可以讓玩家把帳號綁定到 Google，跨裝置保留進度）。
+3. **建立 Firestore。** Build > Firestore Database > 建立資料庫（正式環境模式即可）。
+   接著把這個 repo 裡的 [`firestore.rules`](../firestore.rules) 發布上去（Firestore >
+   規則分頁，貼上內容並按「發布」）——它會限制每份個人資料文件只有本人（已登入者）能
+   讀寫。如果跳過這步，就會維持主控台預設的規則，視你當初選的模式，有可能任何人都能
+   讀寫任何人的資料。
+4. **取得 Web 設定值。** 專案設定（⚙️齒輪）> 一般 > 你的應用程式 > 新增一個 Web
+   應用程式（</> 圖示）> 從畫面上顯示的 `firebaseConfig` 物件複製這四個值：
+   `apiKey`、`authDomain`、`projectId`、`appId`。（依 Firebase 自己的設計，這幾個值
+   本來就不是機密——存取控制是靠上面那份 Firestore 規則，而不是靠把設定值藏起來——
+   不過沒必要的話還是不要把它們提交進版本控制。）
+5. **把這四個值接進去：**
+   - 本機開發：把 `.env.example` 複製成 `.env.local`，把四個值貼進去。
+   - 部署到 GitHub Pages 的版本（`.github/workflows/deploy.yml`）：把同樣四個值加成
+     repo 的 secrets——GitHub repo > Settings > Secrets and variables > Actions >
+     New repository secret，名稱要完全對應：`VITE_FIREBASE_API_KEY`、
+     `VITE_FIREBASE_AUTH_DOMAIN`、`VITE_FIREBASE_PROJECT_ID`、`VITE_FIREBASE_APP_ID`。
+     workflow 已經會去讀這些 secrets，下次 push（或手動重跑一次）就會自動生效，不用
+     再改任何東西。
+6. 重新建置（本機執行 `npm run build`，或部署版直接 push 就會自動跑）。遊戲裡「設定」
+   頁面的「帳號狀態」會從「未啟用雲端同步」變成已登入狀態，代表雲端同步真的動起來了。
 
-## Why disabled-by-default is safe
+## 為什麼「預設關閉」是安全的
 
-`src/firebase/config.ts` computes `firebaseEnabled` from
-`import.meta.env.VITE_FIREBASE_*` and gates everything else behind it. Critically,
-the actual `firebase/app`/`firebase/auth`/`firebase/firestore` packages are only ever
-reached through dynamic `import()` calls inside `getFirebase()`, `initAuth()`,
-`linkGoogleAccount()`, `loadProfile()`, and `saveProfile()` — never a top-level
-`import`. When disabled, none of those imports ever execute, so the SDK is never even
-downloaded (confirmed by inspecting the production build's network requests — see
-`docs/architecture.md`'s bundle-size note).
+`src/firebase/config.ts` 會用 `import.meta.env.VITE_FIREBASE_*` 這幾個環境變數算出
+`firebaseEnabled`，其他所有東西都被這個開關擋住。關鍵是：`firebase/app`、
+`firebase/auth`、`firebase/firestore` 這幾個套件全部都只透過 `getFirebase()`、
+`initAuth()`、`linkGoogleAccount()`、`loadProfile()`、`saveProfile()` 裡面的動態
+`import()` 載入——完全沒有頂層 `import`。所以沒設定 Firebase 的時候，這些
+`import()` 一次都不會被執行，連 SDK 本身都不會被下載（實際檢查過正式建置的網路請求
+可以確認這點——見 `docs/architecture.md` 裡關於 bundle 大小的說明）。
 
-## Auth (`src/firebase/auth.ts`)
+## 驗證（`src/firebase/auth.ts`）
 
-- `initAuth(onChange)`: on first launch, signs in anonymously (spec section 46) and
-  reports `AuthStatus` (`disabled` | `signed-out` | `anonymous` | `google`) to the
-  caller. `App.tsx` calls this once via `playerStore.initCloud()` in a top-level
-  effect.
-- `linkGoogleAccount()`: called from Settings once `authStatus === 'anonymous'`. Uses
-  `linkWithPopup(auth.currentUser, googleProvider)` on the *existing* anonymous user
-  — deliberately a **link**, not a fresh `signInWithPopup`, so the player keeps their
-  existing uid and progress instead of starting a new account. If the Google account
-  is already tied to a different Firebase user (`auth/credential-already-in-use`),
-  this currently just surfaces the error to the console; the spec's intended
-  resolution (offer the player a choice, keep whichever side has more progress) is
-  not yet built — see "Known simplifications" below.
+- `initAuth(onChange)`：第一次啟動時會自動匿名登入（對應規格書第 46 節），並把
+  `AuthStatus`（`disabled` | `signed-out` | `anonymous` | `google` 其中之一）回報給
+  呼叫者。`App.tsx` 會在最上層的一個 effect 裡透過 `playerStore.initCloud()` 呼叫一次。
+- `linkGoogleAccount()`：在「設定」頁面裡，當 `authStatus === 'anonymous'` 時可以呼叫。
+  它是對*現有*的匿名使用者呼叫 `linkWithPopup(auth.currentUser, googleProvider)`——
+  刻意用「綁定（link）」而不是重新 `signInWithPopup`，這樣玩家才能保留原本的 uid 和
+  進度，而不是變成一個全新帳號。如果這個 Google 帳號已經綁定過另一個 Firebase 使用者
+  （會丟出 `auth/credential-already-in-use`），目前只會把錯誤印到 console——規格書
+  預期的處理方式（讓玩家自己選要保留哪一邊的進度）還沒做，詳見下面「目前簡化掉的部分」。
 
-## Firestore shape
+## Firestore 資料結構
 
-One document per user, all top-level fields at `users/{uid}` (not subcollections —
-`playerStore`'s entire `PersistedShape` is written as one document):
+每個使用者一份文件，所有欄位都攤平放在 `users/{uid}` 底下（不是用子集合——
+`playerStore` 整個 `PersistedShape` 就是一份文件）：
 
 ```
 users/{uid}
@@ -76,41 +70,37 @@ users/{uid}
   missionsDaily, missionsWeekly, library, settings, updatedAt
 ```
 
-This mirrors `playerStore.ts`'s own shape exactly (see that file for the authoritative
-field types) rather than the finer-grained subcollection layout originally sketched
-here — one document is simpler to reason about at this scale and matches the
-"sync the whole profile at checkpoints" policy below.
+這個結構完全比照 `playerStore.ts` 自己的資料形狀（正確的欄位型別以那個檔案為準），
+而不是這份文件當初粗略構想的、切得更細的子集合版本——以這個遊戲的規模來說，單一
+文件比較容易理解，也符合下面「在檢查點同步整份個人資料」的策略。
 
-## Sync policy (`src/store/playerStore.ts`)
+## 同步策略（`src/store/playerStore.ts`）
 
-Per spec section 47/48: the in-progress `GameState` (every drag, every flip) never
-touches Firestore — it isn't even in `playerStore`, which only holds
-already-checkpointed data (coins, best scores, stats, missions, achievements,
-library, settings). Every mutating `playerStore` action funnels through one `commit(get,
-set)` helper that:
+依照規格書第 47/48 節：正在進行中的 `GameState`（每一次拖曳、每一次翻牌）完全不會
+碰到 Firestore——它甚至根本不在 `playerStore` 裡，`playerStore` 只保存已經「存檔」
+的資料（金幣、最佳成績、統計、任務、成就、圖書館、設定）。每一個會修改資料的
+`playerStore` action 都會經過同一個 `commit(get, set)` 函式：
 
-1. Writes `localStorage` immediately (unconditionally, so the game works fully
-   offline / with Firebase disabled).
-2. Schedules a debounced (2s) Firestore write via `scheduleCloudPush`, only once
-   `cloudUid` is set (i.e. after `initCloud()`'s anonymous sign-in resolves).
+1. 立刻寫入 `localStorage`（無條件執行，所以就算完全離線、或 Firebase 沒開啟，
+   遊戲依然能正常運作）。
+2. 只有在 `cloudUid` 已經設定好的情況下（也就是 `initCloud()` 的匿名登入完成之後），
+   才會透過 `scheduleCloudPush` 排一個防抖動（2 秒）的 Firestore 寫入。
 
-On sign-in, `initCloud()` does a one-time merge: it loads the remote profile and
-compares its `updatedAt` against the local copy's, adopting whichever is newer
-wholesale. This is a deliberately simple last-write-wins policy, not a field-level
-merge — see "Known simplifications."
+登入的當下，`initCloud()` 會做一次性的合併：讀取雲端的個人資料，比較它的
+`updatedAt` 跟本機那份的新舊，整份採用比較新的那一邊。這是刻意做得很單純的
+「後寫入者全贏（last-write-wins）」策略，不是逐欄位合併——詳見下方「目前簡化掉的
+部分」。
 
-## Known simplifications (would need work before shipping this for real)
+## 目前簡化掉的部分（真的要正式上線前還需要補強）
 
-- **Last-write-wins, not merged.** If a player has unsynced local progress on two
-  devices and opens both before either syncs, one device's session is silently
-  discarded rather than combined. Fine for a single-device player (the common case);
-  risky for true multi-device use.
-- **No `auth/credential-already-in-use` recovery flow.** Linking a Google account
-  already tied to another Firebase user fails without offering the player a way to
-  choose which side to keep.
-- **No retry/backoff on failed cloud writes** beyond a console error — a dropped
-  connection mid-sync doesn't get automatically retried until the next local write
-  happens to trigger `commit()` again.
+- **後寫入者全贏，而不是合併。** 如果玩家在兩台裝置上都有還沒同步的本機進度，並且
+  在任何一邊同步之前就把兩台都打開，其中一台的那段遊戲紀錄會被直接蓋掉，而不是
+  合併起來。單一裝置的玩家（大多數情況）完全不受影響；真的要多裝置同時玩才會有風險。
+- **沒有處理 `auth/credential-already-in-use` 的復原流程。** 如果要綁定的 Google
+  帳號已經綁在另一個 Firebase 使用者身上，綁定會直接失敗，不會讓玩家選要保留哪一邊
+  的進度。
+- **雲端寫入失敗沒有重試機制**，除了在 console 印一個錯誤以外什麼都不會做——連線
+  中斷導致同步失敗後，要等到下一次本機寫入剛好又觸發 `commit()`，才會再試一次。
 
-None of these affect the local-only experience at all; they only matter once a real
-Firebase project is wired in via `.env.local`.
+以上這些完全不影響「純本機」的遊戲體驗；只有在透過 `.env.local` 接上一個真正的
+Firebase 專案之後，這些限制才會實際發生影響。

@@ -10,6 +10,7 @@ import Settings from './components/Settings'
 import Board from './components/Board'
 import { useGameStore } from './store/gameStore'
 import { usePlayerStore } from './store/playerStore'
+import { ensureAiContentLoaded } from './firebase/aiContent'
 import './App.css'
 
 type Screen =
@@ -30,6 +31,9 @@ function App() {
 
   useEffect(() => {
     initCloud()
+    // Background top-up only — Daily Challenge works with zero AI content, this
+    // just lets it use some once it's loaded (see src/firebase/aiContent.ts).
+    ensureAiContentLoaded()
   }, [initCloud])
 
   useEffect(() => {

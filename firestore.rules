@@ -8,5 +8,17 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
+
+    // AI-generated category content (functions/src/index.ts) — public, read-only.
+    // Every document here already passed the same solver-verified acceptance every
+    // hand-authored level does (see functions/src/index.ts's verifySolvable), so
+    // any signed-in player (including anonymous — everyone gets one, see
+    // src/firebase/auth.ts) may read it. Only Cloud Functions (Admin SDK, which
+    // bypasses these rules entirely) may write it — no client, however
+    // authenticated, ever writes here.
+    match /aiCategories/{categoryId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }
