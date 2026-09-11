@@ -14,15 +14,24 @@ export interface DifficultyShape {
 // "easy/normal/hard" means structurally.
 export const DIFFICULTY_SHAPE: Record<Difficulty, DifficultyShape> = {
   easy: { categoryCount: 3, columnCount: 4, slotCount: 2, deckEnabled: false, deckSize: 0 },
-  normal: { categoryCount: 4, columnCount: 5, slotCount: 2, deckEnabled: true, deckSize: 6 },
-  // Unchanged from the original shape — see the long comment on scripts/
-  // generate-levels.ts's PLAN for why. Two bigger shapes were tried here
-  // (7 categories/8 columns, then 6/7) and both were reverted: even with
-  // varyWordCounts kept sum-preserving, src/engine/solver.ts's plain DFS took
-  // 15-30+ CPU-minutes per offline generation run and once didn't finish at all.
-  // "Hard" gets harder here through *more hard levels per chapter* (see PLAN)
-  // and the varied per-category word counts below, not a bigger single board —
-  // those are free wins the DFS solver doesn't pay extra for.
+  // deckSize bumped 6 -> 7 (25% -> 29% of the board hidden in the deck) to raise
+  // difficulty a little without growing the board itself. A bigger jump (6 -> 8)
+  // was tried and reverted: it isn't just harder for the player, it's much harder
+  // for src/engine/solver.ts's plain DFS too (more deck/waste cycling options per
+  // state blows up the branching factor), and offline generation stopped
+  // finishing in reasonable time — same failure mode as the categoryCount/
+  // columnCount bumps noted below, just from a different knob.
+  normal: { categoryCount: 4, columnCount: 5, slotCount: 2, deckEnabled: true, deckSize: 7 },
+  // categoryCount/columnCount/deckSize unchanged from the original shape — see the
+  // long comment on scripts/generate-levels.ts's PLAN for why on the first two.
+  // deckSize turned out to be just as sensitive: even a +1 bump (9 -> 10) was
+  // tried here and reverted — twice, at +1 and +3 — because it consistently made
+  // src/engine/solver.ts's plain DFS hang for 5+ minutes on this shape's first
+  // 'hard' level during offline generation (bigger deck/waste cycling options per
+  // state blow up the branching factor badly once columnCount/categoryCount are
+  // already at hard's larger values). "Hard" gets harder here only through *more
+  // hard levels per chapter* (see PLAN) and the varied per-category word counts
+  // below — both free wins the DFS solver doesn't pay extra for.
   hard: { categoryCount: 5, columnCount: 6, slotCount: 3, deckEnabled: true, deckSize: 9 },
 }
 

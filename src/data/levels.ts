@@ -92,7 +92,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "fruit": 4,
       "occupation": 6,
@@ -118,7 +118,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "dessert": 6,
       "occupation": 6,
@@ -144,7 +144,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "dessert": 4,
       "occupation": 6,
@@ -274,7 +274,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "bird": 6,
       "marine": 4,
@@ -300,7 +300,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "marine": 4,
       "insect": 6,
@@ -430,7 +430,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "drink": 6,
       "cuisine": 6,
@@ -456,7 +456,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "dessert": 6,
       "cuisine": 4,
@@ -586,7 +586,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "city": 6,
       "vehicle": 4,
@@ -612,7 +612,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "occupation": 6,
       "city": 4,
@@ -742,7 +742,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "filmGenre": 6,
       "instrument": 6,
@@ -768,7 +768,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 6,
+    "deckSize": 7,
     "categoryWordCounts": {
       "filmGenre": 6,
       "instrument": 4,

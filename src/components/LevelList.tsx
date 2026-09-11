@@ -2,6 +2,7 @@ import { CHAPTERS } from '../data/chapters'
 import { getChapterLevels, isLevelUnlocked } from '../data/progression'
 import { usePlayerStore } from '../store/playerStore'
 import { useGameStore } from '../store/gameStore'
+import { useContentStore } from '../store/contentStore'
 
 const DIFFICULTY_LABEL: Record<string, string> = { easy: '簡單', normal: '普通', hard: '困難' }
 
@@ -12,7 +13,9 @@ interface LevelListProps {
 
 export default function LevelList({ chapterId, onBack }: LevelListProps) {
   const chapter = CHAPTERS.find((c) => c.id === chapterId)
-  const levels = getChapterLevels(chapterId)
+  const aiChapterLevels = useContentStore((s) => s.aiChapterLevels)
+  const extraLevels = Object.values(aiChapterLevels).flat()
+  const levels = getChapterLevels(chapterId, extraLevels)
   const levelRecords = usePlayerStore((s) => s.levelRecords)
   const startLevel = useGameStore((s) => s.startLevel)
 
@@ -27,7 +30,7 @@ export default function LevelList({ chapterId, onBack }: LevelListProps) {
       <ul className="level-list">
         {levels.map((level, i) => {
           const record = levelRecords[level.id]
-          const unlocked = isLevelUnlocked(chapterId, i, levelRecords)
+          const unlocked = isLevelUnlocked(chapterId, i, levelRecords, extraLevels)
           return (
             <li key={level.id}>
               <button

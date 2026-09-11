@@ -152,6 +152,14 @@
   opacity: 0.5;
 }
 
+.chapter-generate-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  padding: 0 4px;
+}
+
 .level-difficulty {
   font-size: 13px;
   padding: 3px 10px;

@@ -21,6 +21,8 @@ import { CATEGORIES } from '../data/categories'
 import { WORDS } from '../data/words'
 import { LEVELS } from '../data/levels'
 import { buildDailyLevelConfig, getTodayDateString } from '../data/dailyChallenge'
+import { getLoadedAiContent } from '../firebase/aiContent'
+import { getLoadedAiChapters } from '../firebase/aiChapters'
 import { usePlayerStore } from './playerStore'
 import { playSfx, type SfxName } from '../audio/sfx'
 
@@ -102,8 +104,26 @@ function elapsedMs(game: GameState, nowTick: number): number {
 
 function findLevel(levelId: string): LevelConfig {
   const level = LEVELS.find((l) => l.id === levelId)
-  if (!level) throw new Error(`Unknown level id: ${levelId}`)
-  return level
+  if (level) return level
+  for (const chapterLevels of Object.values(getLoadedAiChapters())) {
+    const aiLevel = chapterLevels.find((l) => l.id === levelId)
+    if (aiLevel) return aiLevel
+  }
+  throw new Error(`Unknown level id: ${levelId}`)
+}
+
+/** CATEGORIES/WORDS plus whatever AI-generated content (src/firebase/aiContent.ts,
+ * src/firebase/aiChapters.ts) has loaded so far — a level's categoryIds may
+ * reference either. Daily Challenge never actually picks AI categoryIds (see
+ * data/dailyChallenge.ts), so merging this in here has no effect on it. */
+function allCategories() {
+  const ai = getLoadedAiContent()
+  return ai.categories.length > 0 ? [...CATEGORIES, ...ai.categories] : CATEGORIES
+}
+
+function allWords() {
+  const ai = getLoadedAiContent()
+  return ai.words.length > 0 ? [...WORDS, ...ai.words] : WORDS
 }
 
 function isRunTop(game: GameState, columnIndex: number, cardIndex: number): boolean {
@@ -138,7 +158,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startLevel: (levelId) => {
     const levelConfig = findLevel(levelId)
-    const game = createGame(levelConfig, CATEGORIES, WORDS)
+    const game = createGame(levelConfig, allCategories(), allWords())
     set({
       levelConfig,
       game,
@@ -156,7 +176,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   startDailyLevel: (difficulty) => {
     const date = getTodayDateString()
     const levelConfig = buildDailyLevelConfig(date, difficulty)
-    const game = createGame(levelConfig, CATEGORIES, WORDS)
+    const game = createGame(levelConfig, allCategories(), allWords())
     set({
       levelConfig,
       game,

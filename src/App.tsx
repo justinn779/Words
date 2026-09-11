@@ -11,6 +11,7 @@ import Board from './components/Board'
 import { useGameStore } from './store/gameStore'
 import { usePlayerStore } from './store/playerStore'
 import { ensureAiContentLoaded } from './firebase/aiContent'
+import { useContentStore } from './store/contentStore'
 import './App.css'
 
 type Screen =
@@ -27,6 +28,7 @@ function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' })
   const game = useGameStore((s) => s.game)
   const initCloud = usePlayerStore((s) => s.initCloud)
+  const loadAiChapters = useContentStore((s) => s.loadAiChapters)
   const animationsOn = usePlayerStore((s) => s.settings.animationsOn)
 
   useEffect(() => {
@@ -34,7 +36,11 @@ function App() {
     // Background top-up only — Daily Challenge works with zero AI content, this
     // just lets it use some once it's loaded (see src/firebase/aiContent.ts).
     ensureAiContentLoaded()
-  }, [initCloud])
+    // Picks up any AI-generated chapters other players already triggered (see
+    // src/firebase/aiChapters.ts) so ChapterList/WinModal show them immediately
+    // instead of offering to regenerate content that already exists.
+    loadAiChapters()
+  }, [initCloud, loadAiChapters])
 
   useEffect(() => {
     document.documentElement.classList.toggle('animations-off', !animationsOn)

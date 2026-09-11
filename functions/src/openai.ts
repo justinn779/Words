@@ -18,9 +18,9 @@ export interface GeneratedCategory {
 const OPENAI_MODEL = 'gpt-4o-mini'
 const WORDS_PER_CATEGORY = 10
 
-function buildPrompt(existingCategoryIds: string[], count: number): string {
+function buildPrompt(existingCategoryIds: string[], count: number, theme?: string): string {
   return `你是「文字接龍」這款繁體中文文字分類接龍遊戲的內容設計師。
-
+${theme ? `\n這批分類是為了新章節「${theme}」設計，請讓每個分類的主題都貼合這個章節，但彼此之間仍要能明確區分（不要互相重疊）。\n` : ''}
 請設計 ${count} 個全新的詞語分類，每個分類需要：
 - categoryId：英文 slug（小寫字母、可用連字號，例如 "space-object"），不可與下列已存在的 ID 重複：${existingCategoryIds.join(', ') || '（無）'}
 - name：分類的繁體中文顯示名稱（例如「水果」「動物」），2-6 個字
@@ -38,7 +38,12 @@ function buildPrompt(existingCategoryIds: string[], count: number): string {
  * `existingCategoryIds`. Throws on any network/format failure — the caller decides
  * whether to retry, since this function does no validation of its own beyond
  * parsing the JSON shape. */
-export async function generateCategories(apiKey: string, existingCategoryIds: string[], count: number): Promise<GeneratedCategory[]> {
+export async function generateCategories(
+  apiKey: string,
+  existingCategoryIds: string[],
+  count: number,
+  theme?: string,
+): Promise<GeneratedCategory[]> {
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -47,7 +52,7 @@ export async function generateCategories(apiKey: string, existingCategoryIds: st
     },
     body: JSON.stringify({
       model: OPENAI_MODEL,
-      messages: [{ role: 'user', content: buildPrompt(existingCategoryIds, count) }],
+      messages: [{ role: 'user', content: buildPrompt(existingCategoryIds, count, theme) }],
       response_format: { type: 'json_object' },
       temperature: 0.9,
     }),

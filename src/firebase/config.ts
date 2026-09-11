@@ -7,6 +7,7 @@
 import type { FirebaseApp } from 'firebase/app'
 import type { Auth } from 'firebase/auth'
 import type { Firestore } from 'firebase/firestore'
+import type { Functions } from 'firebase/functions'
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -21,6 +22,7 @@ interface FirebaseHandles {
   app: FirebaseApp
   auth: Auth
   db: Firestore
+  functions: Functions
 }
 
 let handlesPromise: Promise<FirebaseHandles | null> | null = null
@@ -30,12 +32,15 @@ let handlesPromise: Promise<FirebaseHandles | null> | null = null
 export function getFirebase(): Promise<FirebaseHandles | null> {
   if (!firebaseEnabled) return Promise.resolve(null)
   if (!handlesPromise) {
-    handlesPromise = Promise.all([import('firebase/app'), import('firebase/auth'), import('firebase/firestore')]).then(
-      ([{ initializeApp }, { getAuth }, { getFirestore }]) => {
-        const app = initializeApp(config)
-        return { app, auth: getAuth(app), db: getFirestore(app) }
-      },
-    )
+    handlesPromise = Promise.all([
+      import('firebase/app'),
+      import('firebase/auth'),
+      import('firebase/firestore'),
+      import('firebase/functions'),
+    ]).then(([{ initializeApp }, { getAuth }, { getFirestore }, { getFunctions }]) => {
+      const app = initializeApp(config)
+      return { app, auth: getAuth(app), db: getFirestore(app), functions: getFunctions(app) }
+    })
   }
   return handlesPromise
 }

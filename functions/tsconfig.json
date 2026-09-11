@@ -13,6 +13,6 @@
     "resolveJsonModule": true
   },
   "compileOnSave": true,
-  "include": ["src/**/*.ts", "../src/engine/**/*.ts", "../src/data/seed.ts"],
+  "include": ["src/**/*.ts", "../src/engine/**/*.ts", "../src/data/seed.ts", "../src/data/difficultyShapes.ts"],
   "exclude": ["../src/engine/__tests__/**"]
 }
