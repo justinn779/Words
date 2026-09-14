@@ -952,58 +952,6 @@
   color: var(--ink-soft);
 }
 
-/* ---------- Library ---------- */
-.library-slot-list {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.library-slot {
-  padding: 12px 14px;
-  border-radius: var(--radius);
-  background: var(--card-bg);
-  border: 1px solid var(--paper-deep);
-}
-
-.library-slot-name {
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.library-item-options {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.library-item-chip {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--paper-deep);
-  background: var(--paper);
-  font-size: 13px;
-}
-
-.library-item-equipped {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-  font-weight: 600;
-}
-
-.library-item-locked {
-  opacity: 0.55;
-}
-
-.library-item-requirement {
-  font-size: 10px;
-  color: var(--ink-soft);
-}
-
 /* ---------- Settings ---------- */
 .settings-list {
   display: flex;

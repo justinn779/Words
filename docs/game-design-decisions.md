@@ -87,7 +87,9 @@ UI.
 In the initial Phase 1 build, Daily Challenge / Library / Missions / Achievements
 were present as visibly disabled home-screen buttons rather than omitted outright,
 previewing the intended navigation shape (section 61) before those systems existed.
-All four are now fully built (Phases 6–8) and the buttons are live.
+Daily Challenge / Missions / Achievements are now fully built (Phases 6–8) and live;
+Library was later removed entirely (it never grew past a text-only unlock list with
+no visual payoff for equipping anything).
 
 ## Solver move count is never used as a difficulty/scoring signal
 
@@ -120,17 +122,6 @@ other two) later that day is a no-op for streak purposes (`playerStore.recordWin
 (the spec calls it 每日挑戰連續天數) rather than rewarding grinding a single day for
 streak progress.
 
-## Library "items owned" excludes the free defaults
-
-Every one of the 11 library slots starts with a default item already unlocked, so a
-brand-new save already "owns" 11 items before the player does anything. The 收藏家
-(Collector) achievement's threshold (section 45: "取得 10 件圖書館物品") is checked
-against `unlockedItemIds.length - 11`, not the raw count — otherwise it would unlock
-on a save with literally zero purchases, which manual testing caught (playing a
-level immediately showed "🏆 解鎖成就：收藏家" on a fresh profile). This is the kind
-of bug that's invisible from reading the achievement definition alone and only shows
-up by actually running the flow — worth calling out as a reminder to playtest
-progression-gated content, not just unit-test it in isolation.
 
 ## Firebase SDK imports are all dynamic, never top-level
 

@@ -2,7 +2,6 @@ import { create } from 'zustand'
 import type { Difficulty } from '../engine/types'
 import { MISSIONS, getWeekKey, type MissionStatKey } from '../data/missions'
 import { ACHIEVEMENTS, type Statistics } from '../data/achievements'
-import { LIBRARY_ITEMS, LIBRARY_SLOTS, getDefaultItemForSlot } from '../data/library'
 import { getTodayDateString, previousDateString } from '../data/dailyChallenge'
 import { firebaseEnabled } from '../firebase/config'
 import { initAuth, linkGoogleAccount, completeGoogleLinkRedirect, type AuthStatus } from '../firebase/auth'
@@ -42,10 +41,6 @@ interface PersistedShape {
   achievements: Record<string, number>
   missionsDaily: MissionPeriodState
   missionsWeekly: MissionPeriodState
-  library: {
-    unlockedItemIds: string[]
-    equipped: Record<string, string>
-  }
   settings: {
     soundOn: boolean
     animationsOn: boolean
@@ -65,22 +60,7 @@ function emptyStatistics(): Statistics {
     levelsCompletedNoHint: 0,
     hardLevelsCompleted: 0,
     fastEasyClears: 0,
-    libraryItemsOwned: 0,
     dailyStreak: 0,
-  }
-}
-
-/** Every slot starts with exactly one default item unlocked; "items owned" for
- * scoring/achievement purposes should reflect real collecting progress beyond
- * that baseline, not the count a fresh save already starts with. */
-function extraLibraryItemsOwned(unlockedItemIds: string[]): number {
-  return Math.max(0, unlockedItemIds.length - LIBRARY_SLOTS.length)
-}
-
-function defaultLibrary() {
-  return {
-    unlockedItemIds: LIBRARY_ITEMS.filter((i) => i.unlock.type === 'default').map((i) => i.id),
-    equipped: Object.fromEntries(LIBRARY_SLOTS.map((s) => [s.id, getDefaultItemForSlot(s.id).id])),
   }
 }
 
@@ -93,7 +73,6 @@ function defaultShape(): PersistedShape {
     achievements: {},
     missionsDaily: { periodKey: getTodayDateString(), progress: {}, claimed: [] },
     missionsWeekly: { periodKey: getWeekKey(), progress: {}, claimed: [] },
-    library: defaultLibrary(),
     settings: { soundOn: true, animationsOn: true, tutorialSeen: false },
     updatedAt: 0,
   }
@@ -174,7 +153,6 @@ export interface WinRecordInput {
 
 export interface WinRecordResult {
   newlyUnlockedAchievementIds: string[]
-  newlyUnlockedLibraryItemIds: string[]
 }
 
 interface PlayerStore {
@@ -185,7 +163,6 @@ interface PlayerStore {
   achievements: Record<string, number>
   missionsDaily: MissionPeriodState
   missionsWeekly: MissionPeriodState
-  library: PersistedShape['library']
   settings: PersistedShape['settings']
   updatedAt: number
   authStatus: AuthStatus
@@ -194,8 +171,6 @@ interface PlayerStore {
   addCoins: (amount: number) => void
   recordWin: (input: WinRecordInput) => WinRecordResult
   claimMission: (missionId: string) => boolean
-  purchaseLibraryItem: (itemId: string) => boolean
-  equipLibraryItem: (slotId: string, itemId: string) => void
   toggleSound: () => void
   toggleAnimations: () => void
   /** Marks the first-time tutorial as shown (or re-arms it, for "replay" from Settings). */
@@ -221,7 +196,6 @@ function snapshot(get: () => PlayerStore): PersistedShape {
     achievements: s.achievements,
     missionsDaily: s.missionsDaily,
     missionsWeekly: s.missionsWeekly,
-    library: s.library,
     settings: s.settings,
     updatedAt: s.updatedAt,
   }
@@ -235,7 +209,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   achievements: initial.achievements,
   missionsDaily: rollPeriod(initial.missionsDaily, getTodayDateString()),
   missionsWeekly: rollPeriod(initial.missionsWeekly, getWeekKey()),
-  library: initial.library,
   settings: initial.settings,
   updatedAt: initial.updatedAt,
   authStatus: firebaseEnabled ? 'signed-out' : 'disabled',
@@ -303,7 +276,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       levelsCompletedNoHint: state.statistics.levelsCompletedNoHint + (deltas.levelsCompletedNoHint ?? 0),
       hardLevelsCompleted: state.statistics.hardLevelsCompleted + (deltas.hardLevelsCompleted ?? 0),
       fastEasyClears: state.statistics.fastEasyClears + (input.difficulty === 'easy' && input.timeMs <= 60000 ? 1 : 0),
-      libraryItemsOwned: extraLibraryItemsOwned(state.library.unlockedItemIds),
       dailyStreak: daily.streak,
     }
 
@@ -311,8 +283,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     const missionsDaily = addProgress(rollPeriod(state.missionsDaily, getTodayDateString()), deltas)
     const missionsWeekly = addProgress(rollPeriod(state.missionsWeekly, getWeekKey()), deltas)
 
-    // 5. Achievements + stat/achievement-gated library items, both re-evaluated
-    // against the fresh statistics so nothing needs a bespoke "did X just happen" check.
+    // 5. Achievements, re-evaluated against the fresh statistics so nothing needs
+    // a bespoke "did X just happen" check.
     const newlyUnlockedAchievementIds: string[] = []
     const achievements = { ...state.achievements }
     for (const def of ACHIEVEMENTS) {
@@ -322,21 +294,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       }
     }
 
-    const newlyUnlockedLibraryItemIds: string[] = []
-    const unlockedItemIds = new Set(state.library.unlockedItemIds)
-    for (const item of LIBRARY_ITEMS) {
-      if (unlockedItemIds.has(item.id)) continue
-      if (item.unlock.type === 'stat' && statistics[item.unlock.statKey] >= item.unlock.min) {
-        unlockedItemIds.add(item.id)
-        newlyUnlockedLibraryItemIds.push(item.id)
-      } else if (item.unlock.type === 'achievement' && achievements[item.unlock.achievementId]) {
-        unlockedItemIds.add(item.id)
-        newlyUnlockedLibraryItemIds.push(item.id)
-      }
-    }
-    const library = { ...state.library, unlockedItemIds: Array.from(unlockedItemIds) }
-    statistics.libraryItemsOwned = extraLibraryItemsOwned(library.unlockedItemIds)
-
     set({
       coins: state.coins + input.coinsEarned,
       levelRecords,
@@ -345,11 +302,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       achievements,
       missionsDaily,
       missionsWeekly,
-      library,
     })
     commit(get, set)
 
-    return { newlyUnlockedAchievementIds, newlyUnlockedLibraryItemIds }
+    return { newlyUnlockedAchievementIds }
   },
 
   claimMission: (missionId) => {
@@ -369,28 +325,6 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     playSfx('coin', get().settings.soundOn)
     commit(get, set)
     return true
-  },
-
-  purchaseLibraryItem: (itemId) => {
-    const item = LIBRARY_ITEMS.find((i) => i.id === itemId)
-    if (!item || item.unlock.type !== 'coins') return false
-    const state = get()
-    if (state.library.unlockedItemIds.includes(itemId)) return false
-    if (state.coins < item.unlock.amount) return false
-
-    const unlockedItemIds = [...state.library.unlockedItemIds, itemId]
-    const statistics = { ...state.statistics, libraryItemsOwned: extraLibraryItemsOwned(unlockedItemIds) }
-    set({ coins: state.coins - item.unlock.amount, library: { ...state.library, unlockedItemIds }, statistics })
-    playSfx('unlock', get().settings.soundOn)
-    commit(get, set)
-    return true
-  },
-
-  equipLibraryItem: (slotId, itemId) => {
-    const state = get()
-    if (!state.library.unlockedItemIds.includes(itemId)) return
-    set({ library: { ...state.library, equipped: { ...state.library.equipped, [slotId]: itemId } } })
-    commit(get, set)
   },
 
   toggleSound: () => {

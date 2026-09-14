@@ -4,7 +4,6 @@ import { useGameStore } from '../store/gameStore'
 import { usePlayerStore } from '../store/playerStore'
 import { useContentStore } from '../store/contentStore'
 import { ACHIEVEMENTS } from '../data/achievements'
-import { LIBRARY_ITEMS } from '../data/library'
 import {
   getChapterDisplayTitle,
   getChapterLevels,
@@ -135,9 +134,6 @@ export default function WinModal() {
   const unlockedAchievements = (winUnlocks?.achievementIds ?? [])
     .map((id) => ACHIEVEMENTS.find((a) => a.id === id))
     .filter((a): a is NonNullable<typeof a> => Boolean(a))
-  const unlockedLibraryItems = (winUnlocks?.libraryItemIds ?? [])
-    .map((id) => LIBRARY_ITEMS.find((i) => i.id === id))
-    .filter((i): i is NonNullable<typeof i> => Boolean(i))
 
   return (
     <div className="modal-overlay">
@@ -205,13 +201,10 @@ export default function WinModal() {
             <span className="win-stat-value">+{score.coinsEarned}</span>
           </div>
         </div>
-        {(unlockedAchievements.length > 0 || unlockedLibraryItems.length > 0) && (
+        {unlockedAchievements.length > 0 && (
           <div className="win-unlocks">
             {unlockedAchievements.map((a) => (
               <div key={a.id} className="win-unlock-row">🏆 解鎖成就：{a.name}</div>
-            ))}
-            {unlockedLibraryItems.map((i) => (
-              <div key={i.id} className="win-unlock-row">📚 解鎖圖書館物品：{i.name}</div>
             ))}
           </div>
         )}

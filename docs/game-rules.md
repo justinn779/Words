@@ -134,14 +134,3 @@ This is the game's central mechanic:
   win — there's no per-achievement "did X just happen" tracking, so a newly added
   achievement retroactively unlocks correctly the next time stats update rather than
   only from that point forward.
-
-## Library (`src/data/library.ts`)
-
-- 11 fixed slots, each with exactly one default item unlocked from the start. Other
-  items per slot unlock by coin purchase, or automatically once a stat/achievement
-  condition is met (checked alongside achievements after every win).
-- **"Items owned" for scoring purposes excludes the 11 free defaults** — see
-  `extraLibraryItemsOwned` in `playerStore.ts`. Counting the defaults would make the
-  "收藏家" (Collector) achievement (≥10 items) unlock on a brand-new save with zero
-  purchases, which defeats its purpose; this was caught and fixed during manual
-  testing (see `docs/game-design-decisions.md`).

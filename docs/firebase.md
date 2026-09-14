@@ -67,7 +67,7 @@
 ```
 users/{uid}
   coins, levelRecords, daily, statistics, achievements,
-  missionsDaily, missionsWeekly, library, settings, updatedAt
+  missionsDaily, missionsWeekly, settings, updatedAt
 ```
 
 這個結構完全比照 `playerStore.ts` 自己的資料形狀（正確的欄位型別以那個檔案為準），
@@ -78,7 +78,7 @@ users/{uid}
 
 依照規格書第 47/48 節：正在進行中的 `GameState`（每一次拖曳、每一次翻牌）完全不會
 碰到 Firestore——它甚至根本不在 `playerStore` 裡，`playerStore` 只保存已經「存檔」
-的資料（金幣、最佳成績、統計、任務、成就、圖書館、設定）。每一個會修改資料的
+的資料（金幣、最佳成績、統計、任務、成就、設定）。每一個會修改資料的
 `playerStore` action 都會經過同一個 `commit(get, set)` 函式：
 
 1. 立刻寫入 `localStorage`（無條件執行，所以就算完全離線、或 Firebase 沒開啟，

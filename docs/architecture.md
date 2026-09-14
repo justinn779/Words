@@ -19,7 +19,7 @@ src/store/         Zustand. gameStore owns the active session (current GameState
                    click/drag selection, hint/flash UI state, Daily Challenge context)
                    and is the ONLY place that calls into src/engine for rule decisions.
                    playerStore owns cross-session data (coin wallet, level records,
-                   Daily Challenge streak, statistics, missions, achievements, library)
+                   Daily Challenge streak, statistics, missions, achievements)
                    — persisted to localStorage, with an optional debounced Firestore
                    mirror once signed in (see docs/firebase.md).
 
@@ -100,8 +100,10 @@ separate "drag rule" and "click rule."
 - **Phase 6 — done.** Daily Challenge (`src/data/dailyChallenge.ts`) builds an Easy/
   Normal/Hard level per calendar day from a date-derived seed — no server needed for
   everyone to get the same puzzle — with streak tracking in `playerStore`.
-- **Phase 7 — done.** Library meta-game (`src/data/library.ts`): 11 fixed slots, each
-  with a default item plus coin-purchased or stat/achievement-gated alternatives.
+- **Phase 7 — done, later removed.** Library meta-game: 11 fixed slots, each with a
+  default item plus coin-purchased or stat/achievement-gated alternatives. Removed
+  entirely once it became clear it was a text-only unlock list with no visual payoff
+  for equipping anything — see `docs/game-design-decisions.md`.
 - **Phase 8 — done.** Daily/weekly missions (`src/data/missions.ts`) and achievements
   (`src/data/achievements.ts`), both re-evaluated from `playerStore`'s cumulative
   `Statistics` after every win.

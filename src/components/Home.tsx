@@ -1,13 +1,12 @@
 interface HomeProps {
   onOpenChapters: () => void
   onOpenDaily: () => void
-  onOpenLibrary: () => void
   onOpenMissions: () => void
   onOpenAchievements: () => void
   onOpenSettings: () => void
 }
 
-export default function Home({ onOpenChapters, onOpenDaily, onOpenLibrary, onOpenMissions, onOpenAchievements, onOpenSettings }: HomeProps) {
+export default function Home({ onOpenChapters, onOpenDaily, onOpenMissions, onOpenAchievements, onOpenSettings }: HomeProps) {
   return (
     <div className="home-screen">
       <button type="button" className="home-settings-button" onClick={onOpenSettings} aria-label="設定">
@@ -26,9 +25,6 @@ export default function Home({ onOpenChapters, onOpenDaily, onOpenLibrary, onOpe
       <div className="home-menu">
         <button type="button" onClick={onOpenDaily}>
           每日挑戰
-        </button>
-        <button type="button" onClick={onOpenLibrary}>
-          我的圖書館
         </button>
         <button type="button" onClick={onOpenMissions}>
           任務

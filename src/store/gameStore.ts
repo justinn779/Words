@@ -59,7 +59,6 @@ export type CardLoc = { zone: 'column'; columnIndex: number; cardIndex: number }
 
 export interface WinUnlocks {
   achievementIds: string[]
-  libraryItemIds: string[]
 }
 
 interface GameStore {
@@ -394,7 +393,7 @@ function finalizeMove(get: () => GameStore, set: (partial: Partial<GameStore>) =
       daily: dailyDate ? { date: dailyDate } : undefined,
     })
     sfx('levelComplete')
-    if (unlocks.newlyUnlockedAchievementIds.length > 0 || unlocks.newlyUnlockedLibraryItemIds.length > 0) {
+    if (unlocks.newlyUnlockedAchievementIds.length > 0) {
       setTimeout(() => sfx('unlock'), 400)
     }
     set({
@@ -402,7 +401,7 @@ function finalizeMove(get: () => GameStore, set: (partial: Partial<GameStore>) =
       selection: null,
       hint: null,
       score,
-      winUnlocks: { achievementIds: unlocks.newlyUnlockedAchievementIds, libraryItemIds: unlocks.newlyUnlockedLibraryItemIds },
+      winUnlocks: { achievementIds: unlocks.newlyUnlockedAchievementIds },
     })
     return
   }

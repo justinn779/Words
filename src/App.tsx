@@ -3,7 +3,6 @@ import Home from './components/Home'
 import ChapterList from './components/ChapterList'
 import LevelList from './components/LevelList'
 import DailyChallenge from './components/DailyChallenge'
-import Library from './components/Library'
 import Missions from './components/Missions'
 import Achievements from './components/Achievements'
 import Settings from './components/Settings'
@@ -19,7 +18,6 @@ type Screen =
   | { name: 'chapters' }
   | { name: 'levels'; chapterId: string }
   | { name: 'daily' }
-  | { name: 'library' }
   | { name: 'missions' }
   | { name: 'achievements' }
   | { name: 'settings' }
@@ -56,7 +54,6 @@ function App() {
         <Home
           onOpenChapters={() => setScreen({ name: 'chapters' })}
           onOpenDaily={() => setScreen({ name: 'daily' })}
-          onOpenLibrary={() => setScreen({ name: 'library' })}
           onOpenMissions={() => setScreen({ name: 'missions' })}
           onOpenAchievements={() => setScreen({ name: 'achievements' })}
           onOpenSettings={() => setScreen({ name: 'settings' })}
@@ -68,8 +65,6 @@ function App() {
       return <LevelList chapterId={screen.chapterId} onBack={() => setScreen({ name: 'chapters' })} />
     case 'daily':
       return <DailyChallenge onBack={goHome} />
-    case 'library':
-      return <Library onBack={goHome} />
     case 'missions':
       return <Missions onBack={goHome} />
     case 'achievements':
