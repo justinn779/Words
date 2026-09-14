@@ -27,7 +27,7 @@ import { createRng, shuffle } from '../../src/engine/rng'
 import { SEED } from '../../src/data/seed'
 import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets } from '../../src/data/difficultyShapes'
 import { CHAPTERS } from '../../src/data/chapters'
-import { generateCategories, generateNewChapterContent, type GeneratedCategory } from './openai'
+import { generateCategories, generateNewChapterContent, reviewCategories, type GeneratedCategory } from './openai'
 
 initializeApp()
 
@@ -102,22 +102,46 @@ async function existingCategoryIds(): Promise<string[]> {
   return [...SEED.map((row) => row.categoryId), ...snap.docs.map((d) => d.id)]
 }
 
-/** Keeps only the candidates that are well-formed AND solver-verified, out of
- * an already-fetched batch. Does not touch Firestore — see
+/** Every word already in play anywhere in the game — built-in SEED plus every
+ * previously accepted AI category. A category's own categoryId not colliding
+ * with an existing one (existingCategoryIds above) says nothing about whether
+ * its WORDS collide with some other category's; the same word appearing under
+ * two different categories is exactly the ambiguity the design explicitly rules
+ * out ("每個詞語必須...明確、毫無疑義地只屬於這一個分類" — src/data/seed.ts's
+ * header), but nothing checked for it before this. */
+async function existingWords(): Promise<Set<string>> {
+  const db = getFirestore()
+  const snap = await db.collection(AI_CATEGORIES_COLLECTION).select('words').get()
+  const words = new Set<string>(SEED.flatMap((row) => row.words))
+  for (const doc of snap.docs) {
+    const list = doc.data().words as unknown
+    if (Array.isArray(list)) for (const w of list) if (typeof w === 'string') words.add(w)
+  }
+  return words
+}
+
+/** Keeps only the candidates that are well-formed, don't reuse a word that's
+ * already spoken for by some OTHER category (see existingWords above — this is
+ * a distinct check from the categoryId collision below), AND solver-verified,
+ * out of an already-fetched batch. Does not touch Firestore — see
  * persistAcceptedCategories. The verification core shared by both
  * verifyCategoryCandidates (fetches from OpenAI itself) and
  * generateNewChapterNow (which fetches candidates bundled with a chapter
- * theme in one call, via generateNewChapterContent). */
+ * theme in one call, via generateNewChapterContent). Mutates neither input set —
+ * callers doing multiple rounds (generateCategoriesWithTopUp, the retry loop in
+ * generateNewChapterNow) add newly-accepted ids/words to their own copies. */
 function verifyCategoryCandidatesFrom(
   candidates: GeneratedCategory[],
-  existing: string[],
+  existingIds: string[],
+  existingWordSet: Set<string>,
 ): { accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] } {
-  const seen = new Set(existing)
+  const seenIds = new Set(existingIds)
+  const seenWords = new Set(existingWordSet)
   const accepted: VerifiedCategory[] = []
   const rejected: { categoryId: string; reason: string }[] = []
 
   for (const cat of candidates) {
-    if (seen.has(cat.categoryId)) {
+    if (seenIds.has(cat.categoryId)) {
       rejected.push({ categoryId: cat.categoryId, reason: 'categoryId already exists' })
       continue
     }
@@ -126,12 +150,18 @@ function verifyCategoryCandidatesFrom(
       rejected.push({ categoryId: cat.categoryId, reason: formatIssue })
       continue
     }
+    const reusedWord = cat.words.find((w) => seenWords.has(w))
+    if (reusedWord) {
+      rejected.push({ categoryId: cat.categoryId, reason: `word "${reusedWord}" already used by another category` })
+      continue
+    }
     const { solvable, moveCount } = verifySolvable(cat)
     if (!solvable) {
       rejected.push({ categoryId: cat.categoryId, reason: 'solver could not verify a winnable board' })
       continue
     }
-    seen.add(cat.categoryId)
+    seenIds.add(cat.categoryId)
+    for (const w of cat.words) seenWords.add(w)
     accepted.push({ ...cat, moveCount })
   }
 
@@ -144,40 +174,80 @@ function verifyCategoryCandidatesFrom(
  * chapter-generation pipeline below (which passes a `theme` hint). */
 async function verifyCategoryCandidates(
   apiKey: string,
-  existing: string[],
+  existingIds: string[],
+  existingWordSet: Set<string>,
   count: number,
   theme?: string,
 ): Promise<{ accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
-  const candidates = await generateCategories(apiKey, existing, count, theme)
-  return verifyCategoryCandidatesFrom(candidates, existing)
+  const candidates = await generateCategories(apiKey, existingIds, count, theme)
+  return verifyCategoryCandidatesFrom(candidates, existingIds, existingWordSet)
 }
 
 /** Repeatedly calls `fetchBatch` (an OpenAI call already bound to whatever
  * exclusion list it needs, e.g. generateCategories(apiKey, ids, count, theme))
  * until `minAccepted` candidates have passed verification or MAX_TOPUP_ATTEMPTS
  * is exhausted. Each round only asks for the remaining shortfall (+ a small
- * buffer) and excludes every id accepted so far, including from earlier rounds
- * in this same call — see MAX_TOPUP_ATTEMPTS's comment for why this exists. */
+ * buffer) and excludes every id/word accepted so far, including from earlier
+ * rounds in this same call — see MAX_TOPUP_ATTEMPTS's comment for why this exists. */
 async function generateCategoriesWithTopUp(
   fetchBatch: (excludedIds: string[], count: number) => Promise<GeneratedCategory[]>,
   existingIds: string[],
+  existingWordSet: Set<string>,
   minAccepted: number,
   initialCount: number,
 ): Promise<{ accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
-  const excluded = new Set(existingIds)
+  const excludedIds = new Set(existingIds)
+  const excludedWords = new Set(existingWordSet)
   let accepted: VerifiedCategory[] = []
   let rejected: { categoryId: string; reason: string }[] = []
 
   for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < minAccepted; attempt++) {
     const count = attempt === 0 ? initialCount : minAccepted - accepted.length + CATEGORY_REQUEST_BUFFER
-    const candidates = await fetchBatch([...excluded], count)
-    const verified = verifyCategoryCandidatesFrom(candidates, [...excluded])
-    for (const cat of verified.accepted) excluded.add(cat.categoryId)
+    const candidates = await fetchBatch([...excludedIds], count)
+    const verified = verifyCategoryCandidatesFrom(candidates, [...excludedIds], excludedWords)
+    for (const cat of verified.accepted) {
+      excludedIds.add(cat.categoryId)
+      for (const w of cat.words) excludedWords.add(w)
+    }
     accepted = [...accepted, ...verified.accepted]
     rejected = [...rejected, ...verified.rejected]
   }
 
   return { accepted, rejected }
+}
+
+/** Second, semantic quality gate on top of the mechanical checks above (format,
+ * word-collision, solver) — asks OpenAI to self-critique its own output for
+ * vagueness/ambiguity/obscurity a mechanical check can't catch (see
+ * openai.ts's reviewCategories for the exact criteria), and drops anything it
+ * flags. One review call for the whole batch, not one per category. Never lets
+ * the review call itself failing (bad JSON, network hiccup) block generation —
+ * on error, or for any category the reviewer doesn't mention, that category
+ * just passes through unreviewed rather than discarding content over a
+ * formatting problem in the review step. */
+async function reviewAcceptedCategories(
+  apiKey: string,
+  accepted: VerifiedCategory[],
+): Promise<{ kept: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
+  if (accepted.length === 0) return { kept: accepted, rejected: [] }
+  try {
+    const reviews = await reviewCategories(apiKey, accepted)
+    const reviewById = new Map(reviews.map((r) => [r.categoryId, r]))
+    const kept: VerifiedCategory[] = []
+    const rejected: { categoryId: string; reason: string }[] = []
+    for (const cat of accepted) {
+      const review = reviewById.get(cat.categoryId)
+      if (review?.keep === false) {
+        rejected.push({ categoryId: cat.categoryId, reason: `review: ${review.reason ?? 'flagged as low quality'}` })
+        continue
+      }
+      kept.push(cat)
+    }
+    return { kept, rejected }
+  } catch (err) {
+    logger.warn('reviewAcceptedCategories: review call failed, keeping all unreviewed', { error: String(err) })
+    return { kept: accepted, rejected: [] }
+  }
 }
 
 async function persistAcceptedCategories(accepted: VerifiedCategory[]): Promise<void> {
@@ -201,8 +271,9 @@ async function persistAcceptedCategories(accepted: VerifiedCategory[]): Promise<
  * returns a summary rather than throwing, so a partial success (some rejected) is
  * still useful — callers decide whether that's good enough. */
 async function generateAndVerifyCategories(apiKey: string, count: number): Promise<GenerationSummary> {
-  const existing = await existingCategoryIds()
-  const { accepted, rejected } = await verifyCategoryCandidates(apiKey, existing, count)
+  const existingIds = await existingCategoryIds()
+  const existingWordSet = await existingWords()
+  const { accepted, rejected } = await verifyCategoryCandidates(apiKey, existingIds, existingWordSet, count)
   await persistAcceptedCategories(accepted)
   return { requested: count, accepted, rejected }
 }
@@ -369,14 +440,19 @@ export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeou
   await chapterRef.set({ status: 'generating', startedAt: FieldValue.serverTimestamp() })
 
   try {
-    const existing = await existingCategoryIds()
+    const existingIds = await existingCategoryIds()
+    const existingWordSet = await existingWords()
     const theme = CHAPTER_THEME_HINT[chapterId as AiChapterId]
-    const { accepted, rejected } = await generateCategoriesWithTopUp(
+    const topUp = await generateCategoriesWithTopUp(
       (excludedIds, count) => generateCategories(OPENAI_API_KEY.value(), excludedIds, count, theme),
-      existing,
+      existingIds,
+      existingWordSet,
       DIFFICULTY_SHAPE.hard.categoryCount,
       CHAPTER_CATEGORY_POOL_TARGET,
     )
+    const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), topUp.accepted)
+    const accepted = review.kept
+    const rejected = [...topUp.rejected, ...review.rejected]
     logger.info('generateNextChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
 
     if (accepted.length < DIFFICULTY_SHAPE.hard.categoryCount) {
@@ -453,6 +529,7 @@ export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeout
 
   try {
     const existingIds = await existingCategoryIds()
+    const existingWordSet = await existingWords()
     const existingTitles = await existingChapterTitles()
     const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
     const chapterTitle = seed.chapterTitle
@@ -461,18 +538,29 @@ export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeout
     // The theme is only invented once (by generateNewChapterContent above) —
     // any top-up rounds below ask for more categories under that SAME theme
     // (via generateCategories' theme hint), they don't re-invent a new one.
-    const excluded = new Set(existingIds)
-    let { accepted, rejected } = verifyCategoryCandidatesFrom(seed.categories, [...excluded])
-    for (const cat of accepted) excluded.add(cat.categoryId)
+    const excludedIds = new Set(existingIds)
+    const excludedWords = new Set(existingWordSet)
+    let { accepted, rejected } = verifyCategoryCandidatesFrom(seed.categories, [...excludedIds], excludedWords)
+    for (const cat of accepted) {
+      excludedIds.add(cat.categoryId)
+      for (const w of cat.words) excludedWords.add(w)
+    }
 
     for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
       const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
-      const more = await generateCategories(OPENAI_API_KEY.value(), [...excluded], count, chapterTitle)
-      const verified = verifyCategoryCandidatesFrom(more, [...excluded])
-      for (const cat of verified.accepted) excluded.add(cat.categoryId)
+      const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, chapterTitle)
+      const verified = verifyCategoryCandidatesFrom(more, [...excludedIds], excludedWords)
+      for (const cat of verified.accepted) {
+        excludedIds.add(cat.categoryId)
+        for (const w of cat.words) excludedWords.add(w)
+      }
       accepted = [...accepted, ...verified.accepted]
       rejected = [...rejected, ...verified.rejected]
     }
+
+    const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), accepted)
+    accepted = review.kept
+    rejected = [...rejected, ...review.rejected]
     logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
 
     if (accepted.length < DIFFICULTY_SHAPE.hard.categoryCount) {

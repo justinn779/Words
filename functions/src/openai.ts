@@ -18,6 +18,53 @@ export interface GeneratedCategory {
 const OPENAI_MODEL = 'gpt-4o-mini'
 const WORDS_PER_CATEGORY = 10
 
+/** Shared request/parse plumbing for every OpenAI call in this file — a single
+ * user-message chat completion asked to return one JSON object. Throws on any
+ * network/format failure; callers parse the specific shape they expect out of
+ * the returned object. */
+async function callOpenAiJson(apiKey: string, prompt: string): Promise<unknown> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.9,
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new Error(`OpenAI request failed: ${response.status} ${response.statusText} ${body.slice(0, 500)}`)
+  }
+
+  const data = (await response.json()) as { choices?: { message?: { content?: string } }[] }
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('OpenAI response had no content')
+
+  try {
+    return JSON.parse(content)
+  } catch {
+    throw new Error('OpenAI response was not valid JSON')
+  }
+}
+
+function parseGeneratedCategory(c: unknown, i: number): GeneratedCategory {
+  const cat = c as Partial<GeneratedCategory>
+  if (typeof cat.categoryId !== 'string' || typeof cat.name !== 'string' || !Array.isArray(cat.words)) {
+    throw new Error(`Malformed category at index ${i}`)
+  }
+  return {
+    categoryId: cat.categoryId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+    name: cat.name.trim(),
+    words: cat.words.filter((w): w is string => typeof w === 'string').map((w) => w.trim()),
+  }
+}
+
 function buildPrompt(existingCategoryIds: string[], count: number, theme?: string): string {
   return `你是「文字接龍」這款繁體中文文字分類接龍遊戲的內容設計師。
 ${theme ? `\n這批分類是為了新章節「${theme}」設計，請讓每個分類的主題都貼合這個章節，但彼此之間仍要能明確區分（不要互相重疊）。\n` : ''}
@@ -44,52 +91,10 @@ export async function generateCategories(
   count: number,
   theme?: string,
 ): Promise<GeneratedCategory[]> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [{ role: 'user', content: buildPrompt(existingCategoryIds, count, theme) }],
-      response_format: { type: 'json_object' },
-      temperature: 0.9,
-    }),
-  })
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(`OpenAI request failed: ${response.status} ${response.statusText} ${body.slice(0, 500)}`)
-  }
-
-  const data = (await response.json()) as {
-    choices?: { message?: { content?: string } }[]
-  }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('OpenAI response had no content')
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch {
-    throw new Error('OpenAI response was not valid JSON')
-  }
-
+  const parsed = await callOpenAiJson(apiKey, buildPrompt(existingCategoryIds, count, theme))
   const categories = (parsed as { categories?: unknown }).categories
   if (!Array.isArray(categories)) throw new Error('OpenAI response missing a "categories" array')
-
-  return categories.map((c, i) => {
-    const cat = c as Partial<GeneratedCategory>
-    if (typeof cat.categoryId !== 'string' || typeof cat.name !== 'string' || !Array.isArray(cat.words)) {
-      throw new Error(`Malformed category at index ${i}`)
-    }
-    return {
-      categoryId: cat.categoryId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-      name: cat.name.trim(),
-      words: cat.words.filter((w): w is string => typeof w === 'string').map((w) => w.trim()),
-    }
-  })
+  return categories.map(parseGeneratedCategory)
 }
 
 export interface GeneratedChapterContent {
@@ -124,55 +129,52 @@ export async function generateNewChapterContent(
   existingChapterTitles: string[],
   count: number,
 ): Promise<GeneratedChapterContent> {
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: OPENAI_MODEL,
-      messages: [{ role: 'user', content: buildNewChapterPrompt(existingCategoryIds, existingChapterTitles, count) }],
-      response_format: { type: 'json_object' },
-      temperature: 0.9,
-    }),
-  })
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => '')
-    throw new Error(`OpenAI request failed: ${response.status} ${response.statusText} ${body.slice(0, 500)}`)
-  }
-
-  const data = (await response.json()) as {
-    choices?: { message?: { content?: string } }[]
-  }
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('OpenAI response had no content')
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(content)
-  } catch {
-    throw new Error('OpenAI response was not valid JSON')
-  }
-
+  const parsed = await callOpenAiJson(apiKey, buildNewChapterPrompt(existingCategoryIds, existingChapterTitles, count))
   const obj = parsed as { chapterTitle?: unknown; categories?: unknown }
   if (typeof obj.chapterTitle !== 'string' || !obj.chapterTitle.trim()) {
     throw new Error('OpenAI response missing a "chapterTitle" string')
   }
   if (!Array.isArray(obj.categories)) throw new Error('OpenAI response missing a "categories" array')
+  return { chapterTitle: obj.chapterTitle.trim(), categories: obj.categories.map(parseGeneratedCategory) }
+}
 
-  const categories = obj.categories.map((c, i) => {
-    const cat = c as Partial<GeneratedCategory>
-    if (typeof cat.categoryId !== 'string' || typeof cat.name !== 'string' || !Array.isArray(cat.words)) {
-      throw new Error(`Malformed category at index ${i}`)
-    }
-    return {
-      categoryId: cat.categoryId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-      name: cat.name.trim(),
-      words: cat.words.filter((w): w is string => typeof w === 'string').map((w) => w.trim()),
-    }
-  })
+export interface CategoryReview {
+  categoryId: string
+  keep: boolean
+  reason?: string
+}
 
-  return { chapterTitle: obj.chapterTitle.trim(), categories }
+function buildReviewPrompt(categories: GeneratedCategory[]): string {
+  const listing = categories.map((c) => `- ${c.categoryId}（${c.name}）：${c.words.join('、')}`).join('\n')
+  return `你是「文字接龍」這款繁體中文文字分類接龍遊戲的內容品質審核員。以下每個分類都已經通過格式與電腦可解性檢查，現在請你以嚴格玩家的角度覆核，找出品質有問題的分類：
+
+${listing}
+
+審核標準（任一項不符就該淘汰）：
+1. 每個詞語是否「明確且毫無疑義」只屬於這個分類？玩家看到詞語不應該需要猜測或懷疑分類——如果某個詞語其實也能合理歸進別的常見分類，就算不合格。
+2. 分類名稱本身是否具體清楚？像「經典角色」「特殊物品」這種過於空泛、什麼都能塞進去的分類名稱不合格。
+3. 是否有詞語過於冷僻、專業、或一般玩家不會認得？
+4. 詞語跟分類主題的關聯是否自然，而不是硬湊湊出來的？
+
+對每一個分類回傳 keep（是否保留）與 reason（簡短說明，尤其是 keep=false 時務必說明原因）。只回傳一個 JSON 物件，格式為 {"reviews":[{"categoryId":"...","keep":true,"reason":"..."}]}，每個分類都要出現一次，不要有其他文字。`
+}
+
+/** Second, semantic quality gate — runs after the mechanical checks
+ * (isWellFormed/verifySolvable/word-collision in index.ts) on whatever
+ * survived them. Those checks can't catch a vague category name, a word that's
+ * technically unique but still ambiguous, or ones a native reader would find
+ * awkward — this asks the model to self-critique its own output against
+ * exactly those criteria. One call per generation attempt (reviews the whole
+ * batch at once), not one per category, to keep cost/latency down. A reviewer
+ * failure (bad JSON, missing entries) never blocks generation — see index.ts's
+ * reviewAcceptedCategories, which treats a missing review as "keep" rather
+ * than discarding content over a formatting hiccup in the review call itself. */
+export async function reviewCategories(apiKey: string, categories: GeneratedCategory[]): Promise<CategoryReview[]> {
+  if (categories.length === 0) return []
+  const parsed = await callOpenAiJson(apiKey, buildReviewPrompt(categories))
+  const reviews = (parsed as { reviews?: unknown }).reviews
+  if (!Array.isArray(reviews)) throw new Error('OpenAI response missing a "reviews" array')
+  return reviews
+    .map((r) => r as Partial<CategoryReview>)
+    .filter((r): r is CategoryReview => typeof r.categoryId === 'string' && typeof r.keep === 'boolean')
 }
