@@ -1,5 +1,4 @@
-import { CHAPTERS } from '../data/chapters'
-import { getChapterLevels, isLevelUnlocked } from '../data/progression'
+import { getChapterDisplayTitle, getChapterLevels, getContentChapterOrder, isLevelUnlocked } from '../data/progression'
 import { usePlayerStore } from '../store/playerStore'
 import { useGameStore } from '../store/gameStore'
 import { useContentStore } from '../store/contentStore'
@@ -12,10 +11,10 @@ interface LevelListProps {
 }
 
 export default function LevelList({ chapterId, onBack }: LevelListProps) {
-  const chapter = CHAPTERS.find((c) => c.id === chapterId)
-  const aiChapterLevels = useContentStore((s) => s.aiChapterLevels)
-  const extraLevels = Object.values(aiChapterLevels).flat()
+  const aiChapters = useContentStore((s) => s.aiChapters)
+  const extraLevels = Object.values(aiChapters).flatMap((e) => e.levels)
   const levels = getChapterLevels(chapterId, extraLevels)
+  const chapterTitle = getChapterDisplayTitle(chapterId, getContentChapterOrder(extraLevels), aiChapters[chapterId]?.title)
   const levelRecords = usePlayerStore((s) => s.levelRecords)
   const startLevel = useGameStore((s) => s.startLevel)
 
@@ -25,7 +24,7 @@ export default function LevelList({ chapterId, onBack }: LevelListProps) {
         <button type="button" className="hud-back" onClick={onBack}>
           ← 返回
         </button>
-        <h1>{chapter?.title ?? '關卡'}</h1>
+        <h1>{chapterTitle}</h1>
       </div>
       <ul className="level-list">
         {levels.map((level, i) => {

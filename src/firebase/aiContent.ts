@@ -37,6 +37,18 @@ export function ensureAiContentLoaded(): Promise<void> {
   return loadPromise
 }
 
+/** Forces a fresh fetch, replacing the cache instead of reusing the one-time
+ * load. Call this right after generating a new AI chapter (src/store/
+ * contentStore.ts) — that chapter's own categories were just written to
+ * `aiCategories` server-side (functions/src/index.ts's persistAcceptedCategories),
+ * but this module's cache was already settled before then, so without a refresh
+ * createGame() would throw "Unknown category id" the moment the player opens a
+ * level in that chapter, in the same session, before any page reload. */
+export function refreshAiContent(): Promise<void> {
+  loadPromise = loadAiContent()
+  return loadPromise
+}
+
 /** How long to wait for initAuth()'s anonymous sign-in before giving up on this
  * load — firestore.rules requires a signed-in reader, and that sign-in is
  * in-flight (started by initCloud() in App.tsx) independently of this call. */
@@ -67,8 +79,15 @@ async function loadAiContent(): Promise<void> {
     // sign-in (kicked off by initCloud()) may still be in flight when this runs.
     const signedIn = await waitForSignedInUser(fb.auth)
     if (!signedIn) return
-    const { collection, getDocs } = await import('firebase/firestore')
-    const snap = await getDocs(collection(fb.db, 'aiCategories'))
+    const { collection, getDocsFromServer } = await import('firebase/firestore')
+    // getDocs() on a collection query can resolve from the SDK's local
+    // cache/watch state instead of the server — confirmed by testing: a plain
+    // getDocs() here missed a category written moments earlier in the same
+    // session (refreshAiContent's whole reason for existing), while a direct
+    // getDocFromServer() on that exact document saw it immediately. Force a real
+    // server round-trip so a chapter just generated in this session is visible
+    // right away, not just after a reload re-establishes a fresh cache.
+    const snap = await getDocsFromServer(collection(fb.db, 'aiCategories'))
 
     const categories: Category[] = []
     const words: WordEntry[] = []

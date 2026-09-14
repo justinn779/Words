@@ -26,7 +26,8 @@ import { generateSolvableLevel, type LevelConfigWithoutSeed } from '../../src/en
 import { createRng, shuffle } from '../../src/engine/rng'
 import { SEED } from '../../src/data/seed'
 import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets } from '../../src/data/difficultyShapes'
-import { generateCategories, type GeneratedCategory } from './openai'
+import { CHAPTERS } from '../../src/data/chapters'
+import { generateCategories, generateNewChapterContent, type GeneratedCategory } from './openai'
 
 initializeApp()
 
@@ -101,17 +102,16 @@ async function existingCategoryIds(): Promise<string[]> {
   return [...SEED.map((row) => row.categoryId), ...snap.docs.map((d) => d.id)]
 }
 
-/** Asks OpenAI for `count` new categories and keeps only the ones that are
- * well-formed AND solver-verified. Does not touch Firestore — see
- * persistAcceptedCategories. Shared by the plain category top-up and the
- * chapter-generation pipeline below (which passes a `theme` hint). */
-async function verifyCategoryCandidates(
-  apiKey: string,
+/** Keeps only the candidates that are well-formed AND solver-verified, out of
+ * an already-fetched batch. Does not touch Firestore — see
+ * persistAcceptedCategories. The verification core shared by both
+ * verifyCategoryCandidates (fetches from OpenAI itself) and
+ * generateNewChapterNow (which fetches candidates bundled with a chapter
+ * theme in one call, via generateNewChapterContent). */
+function verifyCategoryCandidatesFrom(
+  candidates: GeneratedCategory[],
   existing: string[],
-  count: number,
-  theme?: string,
-): Promise<{ accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
-  const candidates = await generateCategories(apiKey, existing, count, theme)
+): { accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] } {
   const seen = new Set(existing)
   const accepted: VerifiedCategory[] = []
   const rejected: { categoryId: string; reason: string }[] = []
@@ -136,6 +136,20 @@ async function verifyCategoryCandidates(
   }
 
   return { accepted, rejected }
+}
+
+/** Asks OpenAI for `count` new categories and keeps only the ones that are
+ * well-formed AND solver-verified. Does not touch Firestore — see
+ * persistAcceptedCategories. Shared by the plain category top-up and the
+ * chapter-generation pipeline below (which passes a `theme` hint). */
+async function verifyCategoryCandidates(
+  apiKey: string,
+  existing: string[],
+  count: number,
+  theme?: string,
+): Promise<{ accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
+  const candidates = await generateCategories(apiKey, existing, count, theme)
+  return verifyCategoryCandidatesFrom(candidates, existing)
 }
 
 async function persistAcceptedCategories(accepted: VerifiedCategory[]): Promise<void> {
@@ -253,7 +267,7 @@ function buildChapterLevelBase(
 /** Mirrors scripts/generate-levels.ts's generateChapter, but over a freshly
  * AI-generated category pool instead of the static built-in CATEGORIES/WORDS. */
 function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntry[]): { levels: LevelConfig[]; unsolvedIds: string[] } {
-  const rng = createRng(`ai-chapter-${chapterId}`)
+  const rng = createRng(`chapter-levels-${chapterId}`)
   const poolIds = pool.map((c) => c.id)
   const levels: LevelConfig[] = []
   const unsolvedIds: string[] = []
@@ -344,6 +358,92 @@ export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeou
   } catch (err) {
     await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() })
     logger.error('generateNextChapterNow failed', { chapterId, error: String(err) })
+    throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
+  }
+})
+
+// --- Open-ended chapter generation (beyond the 8 in src/data/chapters.ts) -------
+//
+// Once a player finishes every chapter chapters.ts knows about (the 5 hand-
+// authored ones plus the 3 AI-filled placeholders above), there's no more
+// pre-named theme to fill in — the game needs to invent an entirely new one.
+// generateNewChapterNow reserves the next sequential chapter "order" via a
+// Firestore counter (meta/chapterCounter — see firestore.rules for why clients
+// can't touch it directly), asks OpenAI for both a fresh theme and the
+// categories to match, then runs the exact same verify -> build -> store
+// pipeline as generateNextChapterNow. Chapter ids beyond the static roster are
+// named `ai-chapter-{order}`; src/data/progression.ts's getContentChapterOrder
+// sorts these after every chapters.ts entry, by that numeric order.
+
+const CHAPTER_COUNTER_DOC = 'meta/chapterCounter'
+/** Orders 1-8 are already spoken for (5 hand-authored + 3 AI-filled placeholders
+ * in chapters.ts) — the first truly-new chapter starts at 9. */
+const FIRST_DYNAMIC_CHAPTER_ORDER = CHAPTERS.length + 1
+
+/** All chapter titles/themes already in use, static or generated — asked of
+ * OpenAI so it doesn't invent a theme that duplicates one that already exists. */
+async function existingChapterTitles(): Promise<string[]> {
+  const db = getFirestore()
+  const snap = await db.collection(AI_CHAPTERS_COLLECTION).where('status', '==', 'ready').select('title').get()
+  const dynamicTitles = snap.docs.map((d) => d.data().title as string | undefined).filter((t): t is string => Boolean(t))
+  return [...CHAPTERS.map((c) => c.title), ...dynamicTitles]
+}
+
+export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
+  }
+
+  const db = getFirestore()
+  // Atomically reserve the next order number so two players finishing the last
+  // chapter at nearly the same moment don't generate two competing chapters.
+  const order = await db.runTransaction(async (tx) => {
+    const counterRef = db.doc(CHAPTER_COUNTER_DOC)
+    const snap = await tx.get(counterRef)
+    const next = snap.exists ? (snap.data()!.nextOrder as number) : FIRST_DYNAMIC_CHAPTER_ORDER
+    tx.set(counterRef, { nextOrder: next + 1 }, { merge: true })
+    return next
+  })
+  const chapterId = `ai-chapter-${order}`
+  const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
+
+  await chapterRef.set({ status: 'generating', order, startedAt: FieldValue.serverTimestamp() })
+
+  try {
+    const existingIds = await existingCategoryIds()
+    const existingTitles = await existingChapterTitles()
+    const { chapterTitle, categories } = await generateNewChapterContent(
+      OPENAI_API_KEY.value(),
+      existingIds,
+      existingTitles,
+      CHAPTER_CATEGORY_POOL_TARGET,
+    )
+    logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
+
+    const { accepted, rejected } = await verifyCategoryCandidatesFrom(categories, existingIds)
+    logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
+
+    if (accepted.length < DIFFICULTY_SHAPE.hard.categoryCount) {
+      throw new Error(
+        `only ${accepted.length} categories passed verification, need >= ${DIFFICULTY_SHAPE.hard.categoryCount} for a 'hard' level`,
+      )
+    }
+
+    await persistAcceptedCategories(accepted)
+
+    const pool: Category[] = accepted.map((cat) => toEngineShape(cat).category)
+    const words: WordEntry[] = accepted.flatMap((cat) => toEngineShape(cat).words)
+    const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
+    if (unsolvedIds.length > 0) {
+      logger.warn('generateNewChapterNow: some levels unverified', { chapterId, unsolvedIds })
+    }
+
+    await chapterRef.set({ status: 'ready', title: chapterTitle, order, levels, readyAt: FieldValue.serverTimestamp() })
+    logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
+    return { chapterId, title: chapterTitle, order, levels }
+  } catch (err) {
+    await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() }, { merge: true })
+    logger.error('generateNewChapterNow failed', { chapterId, error: String(err) })
     throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
   }
 })

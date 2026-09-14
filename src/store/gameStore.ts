@@ -105,8 +105,8 @@ function elapsedMs(game: GameState, nowTick: number): number {
 function findLevel(levelId: string): LevelConfig {
   const level = LEVELS.find((l) => l.id === levelId)
   if (level) return level
-  for (const chapterLevels of Object.values(getLoadedAiChapters())) {
-    const aiLevel = chapterLevels.find((l) => l.id === levelId)
+  for (const entry of Object.values(getLoadedAiChapters())) {
+    const aiLevel = entry.levels.find((l) => l.id === levelId)
     if (aiLevel) return aiLevel
   }
   throw new Error(`Unknown level id: ${levelId}`)

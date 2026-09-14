@@ -29,22 +29,38 @@ function allLevels(extraLevels: LevelConfig[] = []): LevelConfig[] {
   return extraLevels.length > 0 ? [...LEVELS, ...extraLevels] : LEVELS
 }
 
+/** Chapter ids beyond CHAPTERS' fixed roster (see functions/src/index.ts's
+ * generateNewChapterNow) are named `ai-chapter-{order}`, order assigned
+ * sequentially server-side. */
+const DYNAMIC_CHAPTER_ID_RE = /^ai-chapter-(\d+)$/
+
+/** Sort key for getContentChapterOrder: chapters.ts entries sort by their fixed
+ * position; anything beyond that (an `ai-chapter-{n}` id) sorts after every
+ * chapters.ts entry, ordered by its numeric suffix. */
+function chapterSortKey(chapterId: string): number {
+  const staticIndex = CHAPTERS.findIndex((c) => c.id === chapterId)
+  if (staticIndex !== -1) return staticIndex
+  const dynamicMatch = DYNAMIC_CHAPTER_ID_RE.exec(chapterId)
+  if (dynamicMatch) return CHAPTERS.length + Number(dynamicMatch[1])
+  return Infinity
+}
+
 /** CONTENT_CHAPTER_ORDER plus any AI-generated chapter ids that have content
- * loaded, ordered by their position in the canonical full roster (CHAPTERS) —
- * NOT by extraLevels' array order. extraLevels is ultimately sourced from a
- * Firestore collection query (src/firebase/aiChapters.ts) with no `orderBy`, so
- * its result order isn't guaranteed; trusting it here previously let e.g.
- * history-culture end up ahead of science-world whenever Firestore happened to
- * return them in that order, corrupting the sequential unlock chain (a chapter
- * generated later could unlock before one generated earlier). */
+ * loaded, ordered by chapterSortKey — NOT by extraLevels' array order.
+ * extraLevels is ultimately sourced from a Firestore collection query
+ * (src/firebase/aiChapters.ts) with no `orderBy`, so its result order isn't
+ * guaranteed; trusting it here previously let e.g. history-culture end up ahead
+ * of science-world whenever Firestore happened to return them in that order,
+ * corrupting the sequential unlock chain (a chapter generated later could
+ * unlock before one generated earlier). */
 export function getContentChapterOrder(extraLevels: LevelConfig[] = []): string[] {
   if (extraLevels.length === 0) return CONTENT_CHAPTER_ORDER
   const extraIds = new Set<string>()
   for (const level of extraLevels) {
     if (!CONTENT_CHAPTER_ORDER.includes(level.chapterId)) extraIds.add(level.chapterId)
   }
-  const canonicalOrder = CHAPTERS.map((c) => c.id).filter((id) => extraIds.has(id))
-  return [...CONTENT_CHAPTER_ORDER, ...canonicalOrder]
+  const sortedExtras = [...extraIds].sort((a, b) => chapterSortKey(a) - chapterSortKey(b))
+  return [...CONTENT_CHAPTER_ORDER, ...sortedExtras]
 }
 
 export function getChapterLevels(chapterId: string, extraLevels: LevelConfig[] = []): LevelConfig[] {
@@ -88,6 +104,34 @@ export function isChapterStarGateOpen(chapterId: string, records: LevelRecords, 
   if (!hasContent(previousId, extraLevels)) return false
   const required = Math.ceil(getChapterMaxStars(previousId, extraLevels) * UNLOCK_STAR_FRACTION)
   return getChapterStars(previousId, records, extraLevels) >= required
+}
+
+/** Whether the player has earned enough stars in the last known chapter (in
+ * getContentChapterOrder's combined order — static or AI-generated, whichever is
+ * furthest) to justify generating an entirely new one beyond it. Same 50%
+ * threshold as every other chapter-to-chapter unlock; unlike isChapterStarGateOpen
+ * this doesn't target a specific next chapterId, since a brand-new chapter has no
+ * id yet — the server assigns one (see functions/src/index.ts's
+ * generateNewChapterNow and src/store/contentStore.ts's generateNewChapter). */
+export function isNextNewChapterGateOpen(records: LevelRecords, extraLevels: LevelConfig[] = []): boolean {
+  const order = getContentChapterOrder(extraLevels)
+  const lastId = order[order.length - 1]
+  if (!lastId) return false
+  const required = Math.ceil(getChapterMaxStars(lastId, extraLevels) * UNLOCK_STAR_FRACTION)
+  return getChapterStars(lastId, records, extraLevels) >= required
+}
+
+/** Display title for a chapter: chapters.ts entries already bake in their own
+ * "第N章 ..." prefix; an AI-generated chapter beyond that roster has no such
+ * prefix (its own `title`, if any, is just the short theme OpenAI invented), so
+ * this derives "第N章" from the chapter's actual position in `order` instead of
+ * trusting the AI to know its own number. */
+export function getChapterDisplayTitle(chapterId: string, order: string[], aiTitle?: string): string {
+  const staticTitle = CHAPTERS.find((c) => c.id === chapterId)?.title
+  if (staticTitle) return staticTitle
+  const index = order.indexOf(chapterId)
+  const chapterNumber = index === -1 ? '' : `第${index + 1}章`
+  return [chapterNumber, aiTitle].filter(Boolean).join(' ') || chapterId
 }
 
 /** Within an unlocked chapter, the first level is always open; each further level

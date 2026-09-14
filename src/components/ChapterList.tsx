@@ -1,8 +1,18 @@
 import { useState } from 'react'
 import { CHAPTERS } from '../data/chapters'
-import { getChapterLevels, getChapterMaxStars, getChapterStars, hasContent, isChapterStarGateOpen, isChapterUnlocked } from '../data/progression'
+import {
+  getChapterDisplayTitle,
+  getChapterLevels,
+  getChapterMaxStars,
+  getChapterStars,
+  getContentChapterOrder,
+  hasContent,
+  isChapterStarGateOpen,
+  isChapterUnlocked,
+  isNextNewChapterGateOpen,
+} from '../data/progression'
 import { usePlayerStore } from '../store/playerStore'
-import { useContentStore } from '../store/contentStore'
+import { useContentStore, GENERATING_NEW_CHAPTER } from '../store/contentStore'
 import { AI_CHAPTER_IDS } from '../firebase/aiChapters'
 
 interface ChapterListProps {
@@ -12,16 +22,38 @@ interface ChapterListProps {
 
 export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps) {
   const levelRecords = usePlayerStore((s) => s.levelRecords)
-  const aiChapterLevels = useContentStore((s) => s.aiChapterLevels)
+  const aiChapters = useContentStore((s) => s.aiChapters)
   const generatingChapterId = useContentStore((s) => s.generatingChapterId)
   const generateChapter = useContentStore((s) => s.generateChapter)
-  const extraLevels = Object.values(aiChapterLevels).flat()
+  const generateNewChapter = useContentStore((s) => s.generateNewChapter)
+  const extraLevels = Object.values(aiChapters).flatMap((e) => e.levels)
+  const contentOrder = getContentChapterOrder(extraLevels)
   const [genError, setGenError] = useState<{ chapterId: string; message: string } | null>(null)
+
+  // Rows to render: the fixed 8-chapter roster, plus any entirely new chapters
+  // generated beyond it (ai-chapter-{order} ids — see progression.ts's
+  // chapterSortKey for how these get ordered after every chapters.ts entry).
+  const dynamicIds = contentOrder.filter((id) => !CHAPTERS.some((c) => c.id === id))
+  const rows = [
+    ...CHAPTERS.map((c) => ({ id: c.id, title: c.title })),
+    ...dynamicIds.map((id) => ({ id, title: getChapterDisplayTitle(id, contentOrder, aiChapters[id]?.title) })),
+  ]
+
+  const lastStaticId = CHAPTERS[CHAPTERS.length - 1]?.id
+  const allStaticChaptersFilled = lastStaticId ? hasContent(lastStaticId, extraLevels) : true
+  const canGenerateNewChapter = allStaticChaptersFilled && isNextNewChapterGateOpen(levelRecords, extraLevels)
+  const generatingNewChapter = generatingChapterId === GENERATING_NEW_CHAPTER
 
   const handleGenerate = async (chapterId: string) => {
     setGenError(null)
     const result = await generateChapter(chapterId)
     if (!result.ok) setGenError({ chapterId, message: result.message })
+  }
+
+  const handleGenerateNew = async () => {
+    setGenError(null)
+    const result = await generateNewChapter()
+    if (!result.ok) setGenError({ chapterId: GENERATING_NEW_CHAPTER, message: result.message })
   }
 
   return (
@@ -33,7 +65,7 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
         <h1>目錄</h1>
       </div>
       <ul className="chapter-list">
-        {CHAPTERS.map((chapter) => {
+        {rows.map((chapter) => {
           const playable = hasContent(chapter.id, extraLevels) && isChapterUnlocked(chapter.id, levelRecords, extraLevels)
           const stars = getChapterStars(chapter.id, levelRecords, extraLevels)
           const maxStars = getChapterMaxStars(chapter.id, extraLevels)
@@ -78,6 +110,16 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
             </li>
           )
         })}
+        {canGenerateNewChapter && (
+          <li>
+            <div className="chapter-generate-row">
+              <button type="button" className="settings-toggle" disabled={generatingNewChapter} onClick={handleGenerateNew}>
+                {generatingNewChapter ? '生成中…' : '🪄 用 AI 生成全新章節'}
+              </button>
+              {genError?.chapterId === GENERATING_NEW_CHAPTER && <span className="settings-error">{genError.message}</span>}
+            </div>
+          </li>
+        )}
       </ul>
     </div>
   )

@@ -91,3 +91,88 @@ export async function generateCategories(
     }
   })
 }
+
+export interface GeneratedChapterContent {
+  chapterTitle: string
+  categories: GeneratedCategory[]
+}
+
+function buildNewChapterPrompt(existingCategoryIds: string[], existingChapterTitles: string[], count: number): string {
+  return `你是「文字接龍」這款繁體中文文字分類接龍遊戲的內容設計師。
+
+玩家已經破完所有現有章節，需要一個全新的章節主題。請先想一個簡短有趣的新主題（2-6 個字，例如「電影幕後」「復古科技」），不可與下列已存在的章節主題重複或高度相似：${existingChapterTitles.join('、') || '（無）'}
+
+接著圍繞這個主題，設計 ${count} 個全新的詞語分類，每個分類需要：
+- categoryId：英文 slug（小寫字母、可用連字號，例如 "space-object"），不可與下列已存在的 ID 重複：${existingCategoryIds.join(', ') || '（無）'}
+- name：分類的繁體中文顯示名稱（例如「水果」「動物」），2-6 個字，貼合主題但彼此明確區分（不要互相重疊）
+- words：${WORDS_PER_CATEGORY} 個繁體中文詞語，每個詞語必須：
+  - 明確、毫無疑義地只屬於這一個分類（玩家看到這個詞不需要猜測分類，遊戲的挑戰在於排列卡片、不在於分類判斷）
+  - 2-5 個中文字
+  - 彼此不重複
+  - 避免地域敏感、爭議性、或需要專業知識才懂的冷僻詞彙
+
+只回傳一個 JSON 物件，格式為 {"chapterTitle":"...","categories":[{"categoryId":"...","name":"...","words":["...", ...]}]}，不要有任何其他文字、解說或 markdown 標記。`
+}
+
+/** Like generateCategories, but for a brand-new chapter beyond the pre-named
+ * placeholders (src/data/chapters.ts) — OpenAI invents both a short chapter
+ * theme/title and the categories to go with it in one response, so the two stay
+ * thematically consistent without two separate round trips. */
+export async function generateNewChapterContent(
+  apiKey: string,
+  existingCategoryIds: string[],
+  existingChapterTitles: string[],
+  count: number,
+): Promise<GeneratedChapterContent> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      messages: [{ role: 'user', content: buildNewChapterPrompt(existingCategoryIds, existingChapterTitles, count) }],
+      response_format: { type: 'json_object' },
+      temperature: 0.9,
+    }),
+  })
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '')
+    throw new Error(`OpenAI request failed: ${response.status} ${response.statusText} ${body.slice(0, 500)}`)
+  }
+
+  const data = (await response.json()) as {
+    choices?: { message?: { content?: string } }[]
+  }
+  const content = data.choices?.[0]?.message?.content
+  if (!content) throw new Error('OpenAI response had no content')
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(content)
+  } catch {
+    throw new Error('OpenAI response was not valid JSON')
+  }
+
+  const obj = parsed as { chapterTitle?: unknown; categories?: unknown }
+  if (typeof obj.chapterTitle !== 'string' || !obj.chapterTitle.trim()) {
+    throw new Error('OpenAI response missing a "chapterTitle" string')
+  }
+  if (!Array.isArray(obj.categories)) throw new Error('OpenAI response missing a "categories" array')
+
+  const categories = obj.categories.map((c, i) => {
+    const cat = c as Partial<GeneratedCategory>
+    if (typeof cat.categoryId !== 'string' || typeof cat.name !== 'string' || !Array.isArray(cat.words)) {
+      throw new Error(`Malformed category at index ${i}`)
+    }
+    return {
+      categoryId: cat.categoryId.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-'),
+      name: cat.name.trim(),
+      words: cat.words.filter((w): w is string => typeof w === 'string').map((w) => w.trim()),
+    }
+  })
+
+  return { chapterTitle: obj.chapterTitle.trim(), categories }
+}
