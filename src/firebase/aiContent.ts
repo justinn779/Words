@@ -10,7 +10,7 @@
 // the one-time fetch in the background and never throws.
 
 import type { Category, WordEntry } from '../engine/types'
-import { getFirebase } from './config'
+import { getFirebase, waitForSignedInUser } from './config'
 
 interface AiContent {
   categories: Category[]
@@ -47,28 +47,6 @@ export function ensureAiContentLoaded(): Promise<void> {
 export function refreshAiContent(): Promise<void> {
   loadPromise = loadAiContent()
   return loadPromise
-}
-
-/** How long to wait for initAuth()'s anonymous sign-in before giving up on this
- * load — firestore.rules requires a signed-in reader, and that sign-in is
- * in-flight (started by initCloud() in App.tsx) independently of this call. */
-const AUTH_WAIT_TIMEOUT_MS = 8000
-
-async function waitForSignedInUser(auth: import('firebase/auth').Auth): Promise<boolean> {
-  if (auth.currentUser) return true
-  const { onAuthStateChanged } = await import('firebase/auth')
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      unsubscribe()
-      resolve(false)
-    }, AUTH_WAIT_TIMEOUT_MS)
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (!user) return
-      clearTimeout(timer)
-      unsubscribe()
-      resolve(true)
-    })
-  })
 }
 
 async function loadAiContent(): Promise<void> {

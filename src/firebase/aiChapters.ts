@@ -16,7 +16,7 @@
 // this in a reactive Zustand store so UI can re-render when content shows up.
 
 import type { LevelConfig } from '../engine/types'
-import { getFirebase } from './config'
+import { getFirebase, waitForSignedInUser } from './config'
 
 /** The 3 placeholder chapters from src/data/chapters.ts that scripts/generate-
  * levels.ts's PLAN deliberately leaves with zero hand-authored levels (see that
@@ -50,6 +50,12 @@ async function loadAiChapters(): Promise<void> {
   try {
     const fb = await getFirebase()
     if (!fb) return
+    // firestore.rules requires request.auth != null — initAuth()'s anonymous
+    // sign-in (kicked off by initCloud()) may still be in flight when this runs.
+    // Missing this wait was confirmed in production: this read fired before
+    // sign-in settled and was rejected outright with permission-denied.
+    const signedIn = await waitForSignedInUser(fb.auth)
+    if (!signedIn) return
     const { collection, getDocsFromServer, query, where } = await import('firebase/firestore')
     // getDocsFromServer, not getDocs — see the comment on the equivalent read in
     // aiContent.ts's loadAiContent for why a plain collection getDocs() can miss

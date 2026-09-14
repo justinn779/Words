@@ -44,3 +44,35 @@ export function getFirebase(): Promise<FirebaseHandles | null> {
   }
   return handlesPromise
 }
+
+/** How long to wait for initAuth()'s anonymous sign-in before giving up on a read
+ * that needs it — firestore.rules requires a signed-in reader, and that sign-in
+ * is in-flight (started by initCloud() in App.tsx) independently of the caller. */
+const AUTH_WAIT_TIMEOUT_MS = 8000
+
+/** Waits for a signed-in user (any user — anonymous is fine, everyone gets one,
+ * see src/firebase/auth.ts) before a Firestore read that firestore.rules gates on
+ * `request.auth != null`. Every such read needs this: without it, a read fired
+ * before initAuth()'s anonymous sign-in completes gets rejected outright with
+ * `permission-denied` rather than waiting — confirmed in production for both
+ * src/firebase/aiContent.ts and src/firebase/aiChapters.ts before each grew its
+ * own copy of this wait; shared here so a third caller doesn't have to
+ * rediscover the same race. Resolves false (not an error) on timeout — callers
+ * should just skip the read rather than throw, matching this module's "Firebase
+ * disabled is safe" principle. */
+export async function waitForSignedInUser(auth: import('firebase/auth').Auth): Promise<boolean> {
+  if (auth.currentUser) return true
+  const { onAuthStateChanged } = await import('firebase/auth')
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      unsubscribe()
+      resolve(false)
+    }, AUTH_WAIT_TIMEOUT_MS)
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (!user) return
+      clearTimeout(timer)
+      unsubscribe()
+      resolve(true)
+    })
+  })
+}
