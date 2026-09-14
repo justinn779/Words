@@ -152,6 +152,34 @@ async function verifyCategoryCandidates(
   return verifyCategoryCandidatesFrom(candidates, existing)
 }
 
+/** Repeatedly calls `fetchBatch` (an OpenAI call already bound to whatever
+ * exclusion list it needs, e.g. generateCategories(apiKey, ids, count, theme))
+ * until `minAccepted` candidates have passed verification or MAX_TOPUP_ATTEMPTS
+ * is exhausted. Each round only asks for the remaining shortfall (+ a small
+ * buffer) and excludes every id accepted so far, including from earlier rounds
+ * in this same call — see MAX_TOPUP_ATTEMPTS's comment for why this exists. */
+async function generateCategoriesWithTopUp(
+  fetchBatch: (excludedIds: string[], count: number) => Promise<GeneratedCategory[]>,
+  existingIds: string[],
+  minAccepted: number,
+  initialCount: number,
+): Promise<{ accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
+  const excluded = new Set(existingIds)
+  let accepted: VerifiedCategory[] = []
+  let rejected: { categoryId: string; reason: string }[] = []
+
+  for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < minAccepted; attempt++) {
+    const count = attempt === 0 ? initialCount : minAccepted - accepted.length + CATEGORY_REQUEST_BUFFER
+    const candidates = await fetchBatch([...excluded], count)
+    const verified = verifyCategoryCandidatesFrom(candidates, [...excluded])
+    for (const cat of verified.accepted) excluded.add(cat.categoryId)
+    accepted = [...accepted, ...verified.accepted]
+    rejected = [...rejected, ...verified.rejected]
+  }
+
+  return { accepted, rejected }
+}
+
 async function persistAcceptedCategories(accepted: VerifiedCategory[]): Promise<void> {
   if (accepted.length === 0) return
   const db = getFirestore()
@@ -231,7 +259,20 @@ const CHAPTER_THEME_HINT: Record<AiChapterId, string> = {
 /** Same 5-level shape as arts-entertainment in scripts/generate-levels.ts's PLAN —
  * a reasonable single-chapter size that also matches CHAPTER_CATEGORY_POOL_TARGET. */
 const CHAPTER_LEVEL_CURVE: Difficulty[] = ['easy', 'easy', 'normal', 'normal', 'hard']
-const CHAPTER_CATEGORY_POOL_TARGET = 6
+/** Asked for up front, with room to spare — OpenAI doesn't always keep to the
+ * excluded-id/title list perfectly, and the more chapters exist the likelier a
+ * given attempt collides with one of them (see MAX_TOPUP_ATTEMPTS below). */
+const CHAPTER_CATEGORY_POOL_TARGET = 8
+/** How many extra top-up rounds to try if the first batch doesn't clear
+ * DIFFICULTY_SHAPE.hard.categoryCount once duplicates/rejects are filtered out —
+ * each round asks for just the shortfall (+ a small buffer), excluding every id
+ * seen so far, including this chapter's own already-accepted ones. Confirmed
+ * necessary in production: as more chapters accumulate, OpenAI increasingly
+ * resuggests an existing categoryId or a near-duplicate theme despite being told
+ * the exclusion list, and a single failed attempt was aborting generation
+ * outright even though a retry routinely succeeds. */
+const MAX_TOPUP_ATTEMPTS = 3
+const CATEGORY_REQUEST_BUFFER = 3
 /** How long a 'generating' lock is honored before a retry is allowed to just take
  * over — covers a crashed/killed previous attempt rather than wedging the chapter
  * forever. Not a true distributed lock (a rare double-generate under this window
@@ -329,11 +370,12 @@ export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeou
 
   try {
     const existing = await existingCategoryIds()
-    const { accepted, rejected } = await verifyCategoryCandidates(
-      OPENAI_API_KEY.value(),
+    const theme = CHAPTER_THEME_HINT[chapterId as AiChapterId]
+    const { accepted, rejected } = await generateCategoriesWithTopUp(
+      (excludedIds, count) => generateCategories(OPENAI_API_KEY.value(), excludedIds, count, theme),
       existing,
+      DIFFICULTY_SHAPE.hard.categoryCount,
       CHAPTER_CATEGORY_POOL_TARGET,
-      CHAPTER_THEME_HINT[chapterId as AiChapterId],
     )
     logger.info('generateNextChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
 
@@ -412,20 +454,30 @@ export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeout
   try {
     const existingIds = await existingCategoryIds()
     const existingTitles = await existingChapterTitles()
-    const { chapterTitle, categories } = await generateNewChapterContent(
-      OPENAI_API_KEY.value(),
-      existingIds,
-      existingTitles,
-      CHAPTER_CATEGORY_POOL_TARGET,
-    )
+    const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
+    const chapterTitle = seed.chapterTitle
     logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
 
-    const { accepted, rejected } = await verifyCategoryCandidatesFrom(categories, existingIds)
+    // The theme is only invented once (by generateNewChapterContent above) —
+    // any top-up rounds below ask for more categories under that SAME theme
+    // (via generateCategories' theme hint), they don't re-invent a new one.
+    const excluded = new Set(existingIds)
+    let { accepted, rejected } = verifyCategoryCandidatesFrom(seed.categories, [...excluded])
+    for (const cat of accepted) excluded.add(cat.categoryId)
+
+    for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
+      const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
+      const more = await generateCategories(OPENAI_API_KEY.value(), [...excluded], count, chapterTitle)
+      const verified = verifyCategoryCandidatesFrom(more, [...excluded])
+      for (const cat of verified.accepted) excluded.add(cat.categoryId)
+      accepted = [...accepted, ...verified.accepted]
+      rejected = [...rejected, ...verified.rejected]
+    }
     logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
 
     if (accepted.length < DIFFICULTY_SHAPE.hard.categoryCount) {
       throw new Error(
-        `only ${accepted.length} categories passed verification, need >= ${DIFFICULTY_SHAPE.hard.categoryCount} for a 'hard' level`,
+        `only ${accepted.length} categories passed verification after retries, need >= ${DIFFICULTY_SHAPE.hard.categoryCount} for a 'hard' level`,
       )
     }
 
