@@ -444,25 +444,20 @@
   color: var(--ink-soft);
 }
 
-/* Desktop (default): the classic solitaire look — columns and the draw pile
-   (.deck-waste--side) share one row, both at the same --card-w. Below 720px
-   (see the media query at the bottom of this file) .deck-waste--side hides
-   and .deck-waste--top takes over instead, docked beside the category slots
-   in .top-row at its own smaller scale — see Board.tsx for why this is two
-   renders of the same component rather than one moved by CSS alone. */
+/* Holds just the columns now (the draw pile docks beside the category slots
+   in .top-row instead — see Board.tsx). */
 .table-row {
   flex: 1 1 auto;
   min-height: 60px;
   min-width: 0;
   display: flex;
   gap: var(--card-gap);
-  /* stretch (not center): .table-area must fill the row's full cross-axis
-     size (width on desktop's row direction, width again on mobile's column
-     direction — see the media query below) so its *measured* size in
-     Board.tsx reflects the space actually available. align-items:center
-     here would let it shrink to fit its own (small) content instead, and
-     since that content's size comes FROM the measurement, it would collapse
-     toward the minimum card width every render. */
+  /* stretch (not center): .table-area must fill the row's full height so its
+     *measured* size in Board.tsx reflects the space actually available.
+     align-items:center here would let it shrink to fit its own (small)
+     content instead, and since that content's size comes FROM the
+     measurement, it would collapse toward the minimum card width every
+     render. */
   align-items: stretch;
   justify-content: center;
   overflow: hidden;
@@ -472,7 +467,11 @@
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  align-items: center;
+  /* Hug the top instead of centering vertically — any leftover room (a level
+     whose columns are shorter than the tallest possible stack) collects
+     below them, ready to be grown into as the player draws more cards,
+     instead of splitting into equal gaps above and below. */
+  align-items: flex-start;
   justify-content: center;
 }
 
@@ -503,17 +502,15 @@
 }
 
 .deck-waste {
+  /* Its own scale, independent of the columns'/slots' --card-w — keeps the
+     draw pile compact so docking it in .top-row next to the category slots
+     doesn't force that row to wrap on a narrow phone. */
+  --card-w: clamp(40px, 16vw, 76px);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--card-gap);
   flex-shrink: 0;
-}
-
-/* Only one of these two is ever visible — see the media query at the bottom
-   of this file and the comment on .table-row above. */
-.deck-waste--top {
-  display: none;
 }
 
 .deck-pile {
@@ -964,27 +961,6 @@
   .game-screen {
     padding: 8px 8px 20px;
     --card-gap: 6px;
-  }
-
-  /* Phone-specific board layout: the draw pile docks beside the category
-     slots (.top-row) at its own smaller, independent scale instead of
-     sharing the columns' row, so it never shrinks their width/height budget. */
-  .deck-waste--top {
-    display: flex;
-  }
-  .deck-waste--side {
-    display: none;
-  }
-  .deck-waste {
-    --card-w: clamp(40px, 16vw, 76px);
-  }
-  /* Hug the draw pile instead of sitting centered in .table-area's full
-     height — any leftover room (a level whose columns are shorter than the
-     tallest possible stack) stays below the columns, ready for them to grow
-     into as the player draws more cards, instead of splitting into equal
-     gaps above and below. */
-  .table-area {
-    align-items: flex-start;
   }
 }
 

@@ -15,13 +15,12 @@ export default function Board() {
   // stays cheap even with Zustand's reference-equality selector check.
   const maxColumnLen = useGameStore((s) => Math.max(1, ...(s.game?.columns.map((c) => c.length) ?? [1])))
 
-  // .table-area (the columns' container, inside .table-row alongside the draw
-  // pile — see App.css) has its actual rendered width AND height measured
-  // here so cards can be sized to fill the space really available (viewport
-  // minus HUD/category-slots/todo-list, and on desktop minus whatever the
-  // draw pile takes in the same row), not just to avoid a horizontal
-  // scrollbar. Without this, a board with few columns/short stacks left most
-  // of a tall phone screen empty below a small, width-capped table.
+  // .table-area (the columns' container) has its actual rendered width AND
+  // height measured here so cards can be sized to fill the space really
+  // available (viewport minus HUD/top-row/todo-list), not just to avoid a
+  // horizontal scrollbar. Without this, a board with few columns/short
+  // stacks left most of a tall phone screen empty below a small,
+  // width-capped table.
   const tableAreaRef = useRef<HTMLDivElement>(null)
   const [tableSize, setTableSize] = useState<{ width: number; height: number } | null>(null)
 
@@ -59,15 +58,13 @@ export default function Board() {
   return (
     <div className="game-screen" style={{ '--card-w': cardWidth } as React.CSSProperties}>
       <HUD />
-      {/* DeckWaste is rendered twice — once docked beside the category slots
-          (shown on a narrow phone, saving the vertical space a whole extra
-          row would cost) and once beside the columns (shown on desktop's
-          classic side-by-side solitaire layout). A media query in App.css
-          (.deck-waste--top / .deck-waste--side) shows exactly one at a time;
-          both read the same store, so which copy renders is purely visual. */}
+      {/* The draw pile docks beside the category slots on every device now —
+          it used to sit beside the columns on desktop instead, but sharing
+          the (small, card-shaped) slots' row saves a whole extra row of
+          vertical space there too. */}
       <div className="top-row">
         <CategorySlots />
-        <DeckWaste className="deck-waste--top" />
+        <DeckWaste />
       </div>
       <div className="table-row">
         <div className="table-area" ref={tableAreaRef}>
@@ -77,7 +74,6 @@ export default function Board() {
             ))}
           </div>
         </div>
-        <DeckWaste className="deck-waste--side" />
       </div>
       <TodoList />
       <WinModal />
