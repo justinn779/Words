@@ -136,32 +136,30 @@ function tryPickSelection(game: GameState, columnIndex: number, cardIndex: numbe
   const card = column[cardIndex]
   if (!card || !card.faceUp) return null
 
+  // Same-category adjacency is permanently bound (see game-rules.md): clicking
+  // or dragging ANY card in a run — including the column's physical top card,
+  // not just one buried partway in — always picks up the whole bound group
+  // from its true start, never a partial tail. A capping Category Card counts
+  // as part of the run below it too: a word card can only ever legally land
+  // on a *matching* category's word run (canPlaceOnColumn), so a Category
+  // Card sitting right on a word card is always that same category's cap.
   let anchorIndex = cardIndex
-  if (isRunTop(game, columnIndex, cardIndex)) {
-    // A word card can only ever legally land on a *matching* category's word
-    // run (canPlaceOnColumn), so a Category Card sitting right on top of a
-    // word card is always that same category's capping card — permanently
-    // bound to the run below it, same as any other same-category neighbors.
-    // Picking the cap must pick up the whole capped group, not just the lone
-    // card on top (leaving its word run stranded in the column).
+  if (card.cardType === 'category') {
     const below = cardIndex > 0 ? column[cardIndex - 1] : undefined
-    const isCappingCategoryCard =
-      card.cardType === 'category' && below?.faceUp && below.cardType === 'word' && below.categoryId === card.categoryId
-    if (!isCappingCategoryCard) {
-      return { kind: 'column', columnIndex, cardIndex, cardId: card.id }
+    const isCapping = below?.faceUp && below.cardType === 'word' && below.categoryId === card.categoryId
+    if (!isCapping) {
+      // A lone Category Card (nothing bound below it) is only pickable as
+      // itself, and only when nothing sits above it either.
+      return isRunTop(game, columnIndex, cardIndex) ? { kind: 'column', columnIndex, cardIndex, cardId: card.id } : null
     }
     anchorIndex = cardIndex - 1 // the word card just under the cap — walk its run from there
   }
-  // Clicking anywhere inside a same-category run (or its capping Category
-  // Card, handled above) always picks up the WHOLE bound group from its true
-  // start, never just the tail from the clicked card — otherwise a click
-  // partway into a long run could split off and move only its top portion,
-  // leaving the rest of that same-category group behind on its own (see
-  // getBoundRunStart).
   const start = getBoundRunStart(game, columnIndex, anchorIndex)
   // Delegate to the engine's canMoveStack so "what counts as a pickable stack" (a
   // same-category word run, optionally capped by that category's parked Category
-  // Card) lives in exactly one place.
+  // Card) lives in exactly one place — it also rejects a run that doesn't
+  // actually reach the column's physical top (e.g. a stray mismatched card
+  // above it), which a plain backward walk from anchorIndex can't see.
   return canMoveStack(game, columnIndex, start)
     ? { kind: 'column', columnIndex, cardIndex: start, cardId: column[start].id }
     : null
