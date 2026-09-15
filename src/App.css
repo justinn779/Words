@@ -321,6 +321,7 @@
 .top-row {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
   gap: 10px;
 }
 
@@ -419,12 +420,6 @@
      than hidden behind "…". */
   font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   max-width: 100%;
-}
-
-.slot-placeholder {
-  color: var(--ink-soft);
-  font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
-  text-align: center;
 }
 
 .slot-last-card {

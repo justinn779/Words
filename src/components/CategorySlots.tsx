@@ -59,9 +59,10 @@ function SlotView({ index, slot, isHintTarget, effect, onClick }: SlotViewProps)
       ].join(' ')}
       data-dropzone="slot"
       data-index={index}
+      aria-label={slot ? undefined : '空分類欄'}
       onClick={onClick}
     >
-      {slot ? (
+      {slot && (
         <>
           <span className="slot-name">【{slot.name}】</span>
           <div className="slot-progress-track">
@@ -72,8 +73,6 @@ function SlotView({ index, slot, isHintTarget, effect, onClick }: SlotViewProps)
           </span>
           {slot.lastCard && <span className="slot-last-card">{slot.lastCard.text}</span>}
         </>
-      ) : (
-        <span className="slot-placeholder">空分類欄</span>
       )}
       {effect?.kind === 'receive' && (
         <span key={effect.key} className="slot-plus">

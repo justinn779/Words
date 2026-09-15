@@ -32,7 +32,7 @@ export default function TodoList() {
                 .join(' ')}
             >
               <span className="todo-check">{item.completed ? '✓' : ''}</span>
-              <span className="todo-name">{item.revealed ? item.name : '❔ 未知分類'}</span>
+              <span className="todo-name">{item.revealed ? item.name : '❔'}</span>
               <span className="todo-progress">{item.revealed ? `${item.collected}/${item.required}` : '?/?'}</span>
             </li>
           ))}
