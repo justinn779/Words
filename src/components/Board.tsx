@@ -10,17 +10,29 @@ import { useGameStore } from '../store/gameStore'
 
 export default function Board() {
   const columnCount = useGameStore((s) => s.game?.columns.length ?? 0)
-  // The tallest column decides how tall a fanned stack gets — see the
-  // heightFactor comment below. Fixed once per level (from its initial deal,
-  // read imperatively so this isn't a reactive dependency) rather than
-  // tracking the *current* longest column — cards moving between columns
-  // during play would otherwise constantly nudge the card size, making the
-  // whole board visibly resize on every move instead of just when a new
-  // level actually starts.
+  // The tallest a fanned column could ever get decides how tall a stack gets
+  // sized for — see the heightFactor comment below. Fixed once per level
+  // (from its initial deal, read imperatively so this isn't a reactive
+  // dependency) rather than tracking the *current* longest column — cards
+  // moving between columns during play would otherwise constantly nudge the
+  // card size, making the whole board visibly resize on every move instead of
+  // just when a new level actually starts.
+  //
+  // The initial deal's own tallest column isn't the true ceiling, though: a
+  // player can deliberately pile an entire category's worth of word cards
+  // (plus its capping Category Card) onto any one column before delivering
+  // it to a slot, so the reserved height also has to cover the largest
+  // category in the level landing entirely on top of the tallest starting
+  // column — otherwise that column can grow past its reserved space and
+  // force the page to scroll.
   const levelKey = useGameStore((s) => (s.game ? `${s.game.levelId}:${s.game.startedAt}` : null))
   const maxColumnLen = useMemo(() => {
-    const columns = useGameStore.getState().game?.columns ?? []
-    return Math.max(1, ...columns.map((c) => c.length))
+    const game = useGameStore.getState().game
+    const columns = game?.columns ?? []
+    const initialMaxColumnLen = Math.max(1, ...columns.map((c) => c.length))
+    const maxCategorySize = Math.max(0, ...Object.values(game?.categoryMeta ?? {}).map((m) => m.required))
+    // +1 for the category's own capping Category Card riding along on top.
+    return initialMaxColumnLen + (maxCategorySize > 0 ? maxCategorySize + 1 : 0)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [levelKey])
 
