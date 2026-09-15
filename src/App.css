@@ -439,7 +439,14 @@
   min-width: 0;
   display: flex;
   gap: var(--card-gap);
-  align-items: center;
+  /* stretch (not center): .table-area must fill the row's full cross-axis
+     size (width on desktop's row direction, width again on mobile's column
+     direction — see the media query below) so its *measured* size in
+     Board.tsx reflects the space actually available. align-items:center
+     here would let it shrink to fit its own (small) content instead, and
+     since that content's size comes FROM the measurement, it would collapse
+     toward the minimum card width every render. */
+  align-items: stretch;
   justify-content: center;
   overflow: hidden;
 }
@@ -480,6 +487,7 @@
 
 .deck-waste {
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: var(--card-gap);
   flex-shrink: 0;
