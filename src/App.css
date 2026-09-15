@@ -331,10 +331,13 @@
 }
 
 .slot {
+  /* Same shape whether empty or holding a category — a slot with cards in it
+     shouldn't suddenly balloon into a wide banner (see .slot-name/.slot-count
+     below for how the text stays readable at this size). */
   position: relative;
-  flex: 1 1 140px;
-  min-width: 96px;
-  min-height: 64px;
+  flex: 0 0 auto;
+  width: var(--card-w);
+  height: var(--card-h);
   border-radius: var(--radius);
   border: 2px dashed var(--paper-deep);
   background: var(--card-bg);
@@ -342,17 +345,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 8px;
-  gap: 4px;
-}
-
-.slot-empty {
-  flex: 0 0 auto;
-  width: var(--card-w);
-  height: var(--card-h);
-  min-width: 0;
-  min-height: 0;
   padding: 4px;
+  gap: 2px;
+  overflow: hidden;
 }
 
 .slot-active {
@@ -417,6 +412,11 @@
 
 .slot-name {
   font-weight: 600;
+  font-size: clamp(9px, calc(var(--card-w) * 0.14), 13px);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .slot-placeholder {
@@ -427,7 +427,7 @@
 
 .slot-progress-track {
   width: 100%;
-  height: 6px;
+  height: 4px;
   border-radius: 999px;
   background: var(--paper-deep);
   overflow: hidden;
@@ -440,7 +440,7 @@
 }
 
 .slot-count {
-  font-size: 12px;
+  font-size: clamp(8px, calc(var(--card-w) * 0.12), 12px);
   color: var(--ink-soft);
 }
 
@@ -527,12 +527,15 @@
 
 .deck-count {
   position: absolute;
-  bottom: -18px;
-  left: 0;
-  right: 0;
-  text-align: center;
-  font-size: 12px;
-  color: var(--ink-soft);
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(14px, calc(var(--card-w) * 0.28), 28px);
+  font-weight: 700;
+  color: var(--paper);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
 }
 
 .waste-pile {
@@ -596,6 +599,7 @@
 }
 
 .card-back {
+  position: relative;
   background: var(--card-back);
   border: 1px solid var(--wood-dark);
 }

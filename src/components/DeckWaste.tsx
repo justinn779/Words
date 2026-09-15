@@ -30,11 +30,11 @@ export default function DeckWaste({ className }: DeckWasteProps) {
         {deckCount > 0 ? (
           <div className="card card-back">
             <div className="card-back-pattern" />
+            <span className="deck-count">{deckCount}</span>
           </div>
         ) : (
           <div className="card card-empty-pile">{waste.length > 0 ? '↺' : ''}</div>
         )}
-        <span className="deck-count">{deckCount}</span>
       </button>
       <div className="waste-pile">
         {wasteTop ? (
