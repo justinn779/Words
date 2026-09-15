@@ -1,9 +1,93 @@
 import { useEffect, useRef, useState } from 'react'
 import { useGameStore } from '../store/gameStore'
+import type { CategorySlotState } from '../engine/types'
 
 type SlotFx =
   | { kind: 'receive'; key: number; delta: number }
   | { kind: 'complete'; key: number; name: string }
+
+/** Animates .slot-count/.slot-progress-fill counting up one card at a time
+ * instead of jumping straight to the new value — most noticeable (and most the
+ * point) when a whole same-category stack lands at once and collected jumps by
+ * more than 1. Snaps instantly on any decrease (undo) or when the slot starts a
+ * different category (index reused after a previous one completed). Stepped via
+ * setInterval rather than requestAnimationFrame: this only ever counts through
+ * a handful of integers, so a discrete per-card tick reads as "counting cards"
+ * more literally than a smooth tween would anyway. */
+function useCountUp(target: number): number {
+  const [displayed, setDisplayed] = useState(target)
+  const prevTarget = useRef(target)
+
+  useEffect(() => {
+    const from = prevTarget.current
+    prevTarget.current = target
+    if (target <= from) {
+      setDisplayed(target)
+      return
+    }
+    let current = from
+    const id = setInterval(() => {
+      current += 1
+      setDisplayed(current)
+      if (current >= target) clearInterval(id)
+    }, 120)
+    return () => clearInterval(id)
+  }, [target])
+
+  return displayed
+}
+
+interface SlotViewProps {
+  index: number
+  slot: CategorySlotState | null
+  isHintTarget: boolean
+  effect: SlotFx | undefined
+  onClick: () => void
+}
+
+function SlotView({ index, slot, isHintTarget, effect, onClick }: SlotViewProps) {
+  const displayedCollected = useCountUp(slot?.collected ?? 0)
+
+  return (
+    <button
+      type="button"
+      className={[
+        'slot',
+        slot ? 'slot-active' : 'slot-empty',
+        isHintTarget ? 'slot-hinted' : '',
+        effect?.kind === 'receive' ? 'slot-receiving' : '',
+      ].join(' ')}
+      data-dropzone="slot"
+      data-index={index}
+      onClick={onClick}
+    >
+      {slot ? (
+        <>
+          <span className="slot-name">【{slot.name}】</span>
+          <div className="slot-progress-track">
+            <div className="slot-progress-fill" style={{ width: `${(displayedCollected / slot.required) * 100}%` }} />
+          </div>
+          <span className="slot-count">
+            {displayedCollected} / {slot.required}
+          </span>
+          {slot.lastCard && <span className="slot-last-card">{slot.lastCard.text}</span>}
+        </>
+      ) : (
+        <span className="slot-placeholder">空分類欄</span>
+      )}
+      {effect?.kind === 'receive' && (
+        <span key={effect.key} className="slot-plus">
+          +{effect.delta}
+        </span>
+      )}
+      {effect?.kind === 'complete' && (
+        <span key={effect.key} className="slot-complete-burst">
+          ✓ {effect.name}
+        </span>
+      )}
+    </button>
+  )
+}
 
 export default function CategorySlots() {
   const slots = useGameStore((s) => s.game?.categorySlots ?? [])
@@ -55,49 +139,15 @@ export default function CategorySlots() {
     <div className="category-slots">
       {slots.map((slot, i) => {
         const isHintTarget = hint?.to?.zone === 'slot' && hint.to.index === i
-        const effect = fx[i]
         return (
-          <button
+          <SlotView
             key={i}
-            type="button"
-            className={[
-              'slot',
-              slot ? 'slot-active' : 'slot-empty',
-              isHintTarget ? 'slot-hinted' : '',
-              effect?.kind === 'receive' ? 'slot-receiving' : '',
-            ].join(' ')}
-            data-dropzone="slot"
-            data-index={i}
+            index={i}
+            slot={slot}
+            isHintTarget={isHintTarget}
+            effect={fx[i]}
             onClick={() => clickSlot(i)}
-          >
-            {slot ? (
-              <>
-                <span className="slot-name">【{slot.name}】</span>
-                <div className="slot-progress-track">
-                  <div
-                    className="slot-progress-fill"
-                    style={{ width: `${(slot.collected / slot.required) * 100}%` }}
-                  />
-                </div>
-                <span className="slot-count">
-                  {slot.collected} / {slot.required}
-                </span>
-                {slot.lastCard && <span className="slot-last-card">{slot.lastCard.text}</span>}
-              </>
-            ) : (
-              <span className="slot-placeholder">空分類欄</span>
-            )}
-            {effect?.kind === 'receive' && (
-              <span key={effect.key} className="slot-plus">
-                +{effect.delta}
-              </span>
-            )}
-            {effect?.kind === 'complete' && (
-              <span key={effect.key} className="slot-complete-burst">
-                ✓ {effect.name}
-              </span>
-            )}
-          </button>
+          />
         )
       })}
     </div>
