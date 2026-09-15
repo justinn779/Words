@@ -167,9 +167,10 @@
 .level-item {
   width: 100%;
   display: flex;
-  align-items: center;
+  flex-wrap: wrap;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
+  gap: 4px 12px;
   padding: 16px 18px;
   border-radius: var(--radius);
   border: 1px solid var(--paper-deep);
@@ -188,7 +189,13 @@
   color: var(--accent);
 }
 
+/* The locked-chapter reason ("需先取得前一章一半星星") is long enough to wrap
+   on a narrow phone screen — letting the row wrap (rather than forcing both
+   children onto one line) keeps it a clean second line under the title
+   instead of interleaving with it mid-word. */
 .chapter-locked {
+  flex-basis: 100%;
+  text-align: right;
   opacity: 0.5;
 }
 
