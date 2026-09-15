@@ -68,6 +68,9 @@ export interface CategorySlotState {
   name: string
   collected: number
   required: number
+  /** The word card most recently delivered into this slot — undefined until the
+   * first one lands (a freshly-activated slot has collected 0, nothing to show yet). */
+  lastCard?: WordCard
 }
 
 export interface TodoItem {

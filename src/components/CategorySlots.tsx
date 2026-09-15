@@ -82,6 +82,7 @@ export default function CategorySlots() {
                 <span className="slot-count">
                   {slot.collected} / {slot.required}
                 </span>
+                {slot.lastCard && <span className="slot-last-card">{slot.lastCard.text}</span>}
               </>
             ) : (
               <span className="slot-placeholder">空分類欄</span>

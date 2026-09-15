@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Column from './Column'
 import DeckWaste from './DeckWaste'
 import CategorySlots from './CategorySlots'
@@ -11,9 +11,18 @@ import { useGameStore } from '../store/gameStore'
 export default function Board() {
   const columnCount = useGameStore((s) => s.game?.columns.length ?? 0)
   // The tallest column decides how tall a fanned stack gets — see the
-  // heightFactor comment below. Only the count matters, not identity, so this
-  // stays cheap even with Zustand's reference-equality selector check.
-  const maxColumnLen = useGameStore((s) => Math.max(1, ...(s.game?.columns.map((c) => c.length) ?? [1])))
+  // heightFactor comment below. Fixed once per level (from its initial deal,
+  // read imperatively so this isn't a reactive dependency) rather than
+  // tracking the *current* longest column — cards moving between columns
+  // during play would otherwise constantly nudge the card size, making the
+  // whole board visibly resize on every move instead of just when a new
+  // level actually starts.
+  const levelKey = useGameStore((s) => (s.game ? `${s.game.levelId}:${s.game.startedAt}` : null))
+  const maxColumnLen = useMemo(() => {
+    const columns = useGameStore.getState().game?.columns ?? []
+    return Math.max(1, ...columns.map((c) => c.length))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levelKey])
 
   // .table-area (the columns' container) has its actual rendered width AND
   // height measured here so cards can be sized to fill the space really

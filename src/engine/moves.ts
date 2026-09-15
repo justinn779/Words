@@ -1,4 +1,4 @@
-import type { Card, GameState, GameStateCore, Location, MoveResult } from './types'
+import type { Card, GameState, GameStateCore, Location, MoveResult, WordCard } from './types'
 import { findCard, getPile, getRunStartIndex, topOf } from './query'
 
 const MAX_HISTORY = 500
@@ -194,7 +194,7 @@ export function moveToCategorySlot(state: GameState, cardId: string, slotIndex: 
   const slot = next.categorySlots[slotIndex]!
   const collected = slot.collected + 1
   const slots = next.categorySlots.slice()
-  slots[slotIndex] = { ...slot, collected }
+  slots[slotIndex] = { ...slot, collected, lastCard: card }
   next = { ...next, categorySlots: slots }
 
   if (location.zone === 'column') next = flipTopCard(next, location.index)
@@ -303,7 +303,7 @@ export function moveStack(
       : existingSlot!
     const collected = slot.collected + wordPart.length
     const slots = next.categorySlots.slice()
-    slots[destination.index] = { ...slot, collected }
+    slots[destination.index] = { ...slot, collected, lastCard: wordPart[wordPart.length - 1] as WordCard }
     next = { ...next, categorySlots: slots }
     next = flipTopCard(next, columnIndex)
     if (collected >= slot.required) {

@@ -412,7 +412,9 @@
 
 .slot-name {
   font-weight: 600;
-  font-size: clamp(9px, calc(var(--card-w) * 0.14), 13px);
+  /* Same scale as a card's own label (.card's font-size below) — the request
+     was for slot text to read at the same size as the table's cards. */
+  font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -421,8 +423,17 @@
 
 .slot-placeholder {
   color: var(--ink-soft);
-  font-size: clamp(10px, calc(var(--card-w) * 0.15), 13px);
+  font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   text-align: center;
+}
+
+.slot-last-card {
+  font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
+  color: var(--ink);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .slot-progress-track {
@@ -440,7 +451,7 @@
 }
 
 .slot-count {
-  font-size: clamp(8px, calc(var(--card-w) * 0.12), 12px);
+  font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   color: var(--ink-soft);
 }
 
