@@ -600,6 +600,34 @@
   opacity: 0.75;
 }
 
+/* A collapsed run's frontmost card (Column.tsx's getCardRenderInfo) — a single
+   extra shadow layer reads as "slightly thicker", hinting there's more behind
+   it without a heavy stacked-cards illustration. Cards fan *downward* (each
+   later card sits lower and paints over the one before it from the bottom
+   up), so only a sliver at a card's own TOP ever stays visible once something
+   is fanned in front of it — the shadow (and the badge below) both have to
+   live in that sliver, not the bottom, or the very next card hides them. */
+.card-stacked {
+  box-shadow: var(--shadow-soft), 0 -3px 0 0 var(--paper-deep);
+}
+
+.card-stack-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 1.3em;
+  padding: 0.1em 0.35em;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: clamp(9px, calc(var(--card-w) * 0.14), 13px);
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+
 .card-back {
   position: relative;
   background: var(--card-back);

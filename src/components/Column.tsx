@@ -6,19 +6,28 @@ interface ColumnProps {
   columnIndex: number
 }
 
+interface CardRenderInfo {
+  /** Fan-step offset, in units of --card-step. */
+  offset: number
+  /** Cards hidden directly behind this one at the same offset — see below. */
+  stackedCount: number
+}
+
 /**
- * Fan-step offset (in units of --card-step) for each card in the column. A
- * same-category, face-up word run of 3+ cards (optionally capped by that
- * category's own Category Card — see game-rules.md) collapses down to just 2
- * fan steps: its older members stack flush behind the front instead of each
- * adding their own step. Without this, a player deliberately piling up a
- * whole category before delivering it to a slot could grow a column past the
- * height Board.tsx reserves for it. Clicking/dragging still picks up the
- * whole bound group regardless (see gameStore.ts's tryPickSelection) — this
- * only changes where cards are drawn, not what a click resolves to.
+ * Per-card fan position for a column. A same-category, face-up word run of 3+
+ * cards (optionally capped by that category's own Category Card — see
+ * game-rules.md) collapses down to just 2 fan steps: its older members share
+ * one step instead of each adding their own, with only the frontmost of that
+ * shared group actually visible — flagged with `stackedCount` (how many more
+ * are hidden directly behind it) so CardView can badge it, rather than
+ * silently disappearing. Without the collapse itself, a player deliberately
+ * piling up a whole category before delivering it to a slot could grow a
+ * column past the height Board.tsx reserves for it. Clicking/dragging still
+ * picks up the whole bound group regardless of any of this (see
+ * gameStore.ts's tryPickSelection) — it only changes where cards are drawn.
  */
-function getCardOffsets(column: Card[]): number[] {
-  const offsets: number[] = []
+function getCardRenderInfo(column: Card[]): CardRenderInfo[] {
+  const info: CardRenderInfo[] = []
   let step = 0
   let i = 0
   while (i < column.length) {
@@ -37,32 +46,35 @@ function getCardOffsets(column: Card[]): number[] {
       }
       const runLen = runEnd - i + 1
       if (runLen >= 3) {
-        for (let k = i; k <= runEnd - 2; k++) offsets[k] = step
-        offsets[runEnd - 1] = step + 1
-        offsets[runEnd] = step + 2
+        const collapsedFront = runEnd - 2
+        for (let k = i; k <= collapsedFront; k++) {
+          info[k] = { offset: step, stackedCount: k === collapsedFront ? collapsedFront - i : 0 }
+        }
+        info[runEnd - 1] = { offset: step + 1, stackedCount: 0 }
+        info[runEnd] = { offset: step + 2, stackedCount: 0 }
         step += 2
       } else {
         for (let k = i; k <= runEnd; k++) {
-          offsets[k] = step
+          info[k] = { offset: step, stackedCount: 0 }
           step += 1
         }
       }
       i = runEnd + 1
     } else {
-      offsets[i] = step
+      info[i] = { offset: step, stackedCount: 0 }
       step += 1
       i++
     }
   }
-  return offsets
+  return info
 }
 
 export default function Column({ columnIndex }: ColumnProps) {
   const column = useGameStore((s) => s.game?.columns[columnIndex] ?? [])
   const clickEmptyColumn = useGameStore((s) => s.clickEmptyColumn)
 
-  const offsets = getCardOffsets(column)
-  const fanned = offsets.length > 0 ? offsets[offsets.length - 1] : 0
+  const renderInfo = getCardRenderInfo(column)
+  const fanned = renderInfo.length > 0 ? renderInfo[renderInfo.length - 1].offset : 0
 
   return (
     <div
@@ -89,7 +101,8 @@ export default function Column({ columnIndex }: ColumnProps) {
           key={`${card.id}:${card.faceUp}`}
           card={card}
           loc={{ zone: 'column', columnIndex, cardIndex: i }}
-          style={{ position: 'absolute', top: `calc(${offsets[i]} * var(--card-step))`, left: 0, right: 0, zIndex: i }}
+          style={{ position: 'absolute', top: `calc(${renderInfo[i].offset} * var(--card-step))`, left: 0, right: 0, zIndex: i }}
+          stackedCount={renderInfo[i].stackedCount}
         />
       ))}
     </div>

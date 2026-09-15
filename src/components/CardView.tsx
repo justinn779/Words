@@ -28,9 +28,15 @@ interface CardViewProps {
   card: Card
   loc: CardLoc
   style?: React.CSSProperties
+  /** How many more same-category cards are stacked directly behind this one at
+   * the same spot (Column.tsx collapses a long run to save vertical space —
+   * see getCardOffsets) — shown as a small "+N" badge with a thicker shadow
+   * so a collapsed pile still reads as "cards are hidden here", not a
+   * flat single card. Omitted/0 for a normal, uncollapsed card. */
+  stackedCount?: number
 }
 
-export default function CardView({ card, loc, style }: CardViewProps) {
+export default function CardView({ card, loc, style, stackedCount = 0 }: CardViewProps) {
   const selection = useGameStore((s) => s.selection)
   const hint = useGameStore((s) => s.hint)
   const invalidFlash = useGameStore((s) => s.invalidFlash)
@@ -170,6 +176,7 @@ export default function CardView({ card, loc, style }: CardViewProps) {
         isHinted ? 'card-hinted' : '',
         shake ? 'card-shake' : '',
         dragOffset ? 'card-dragging' : '',
+        stackedCount > 0 ? 'card-stacked' : '',
         'card-reveal',
       ]
         .filter(Boolean)
@@ -178,7 +185,7 @@ export default function CardView({ card, loc, style }: CardViewProps) {
       data-card-id={card.id}
       role="button"
       tabIndex={0}
-      aria-label={ariaLabel}
+      aria-label={stackedCount > 0 ? `${ariaLabel}（還有 ${stackedCount} 張疊在下面）` : ariaLabel}
       aria-pressed={isSelected}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
@@ -188,6 +195,7 @@ export default function CardView({ card, loc, style }: CardViewProps) {
     >
       <span className="card-label">{label}</span>
       {isCategory && progress && <span className="card-sub">{progress.required} 張</span>}
+      {stackedCount > 0 && <span className="card-stack-badge">+{stackedCount}</span>}
     </div>
   )
 }
