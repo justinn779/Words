@@ -135,15 +135,30 @@ function tryPickSelection(game: GameState, columnIndex: number, cardIndex: numbe
   const column = game.columns[columnIndex]
   const card = column[cardIndex]
   if (!card || !card.faceUp) return null
+
+  let anchorIndex = cardIndex
   if (isRunTop(game, columnIndex, cardIndex)) {
-    return { kind: 'column', columnIndex, cardIndex, cardId: card.id }
+    // A word card can only ever legally land on a *matching* category's word
+    // run (canPlaceOnColumn), so a Category Card sitting right on top of a
+    // word card is always that same category's capping card — permanently
+    // bound to the run below it, same as any other same-category neighbors.
+    // Picking the cap must pick up the whole capped group, not just the lone
+    // card on top (leaving its word run stranded in the column).
+    const below = cardIndex > 0 ? column[cardIndex - 1] : undefined
+    const isCappingCategoryCard =
+      card.cardType === 'category' && below?.faceUp && below.cardType === 'word' && below.categoryId === card.categoryId
+    if (!isCappingCategoryCard) {
+      return { kind: 'column', columnIndex, cardIndex, cardId: card.id }
+    }
+    anchorIndex = cardIndex - 1 // the word card just under the cap — walk its run from there
   }
-  // Clicking anywhere inside a same-category run always picks up the WHOLE
-  // bound group from its true start, never just the tail from the clicked
-  // card — otherwise a click partway into a long run could split off and
-  // move only its top portion, leaving the rest of that same-category group
-  // behind on its own (see getBoundRunStart).
-  const start = getBoundRunStart(game, columnIndex, cardIndex)
+  // Clicking anywhere inside a same-category run (or its capping Category
+  // Card, handled above) always picks up the WHOLE bound group from its true
+  // start, never just the tail from the clicked card — otherwise a click
+  // partway into a long run could split off and move only its top portion,
+  // leaving the rest of that same-category group behind on its own (see
+  // getBoundRunStart).
+  const start = getBoundRunStart(game, columnIndex, anchorIndex)
   // Delegate to the engine's canMoveStack so "what counts as a pickable stack" (a
   // same-category word run, optionally capped by that category's parked Category
   // Card) lives in exactly one place.

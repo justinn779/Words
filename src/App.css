@@ -413,12 +413,12 @@
 .slot-name {
   font-weight: 600;
   /* Same scale as a card's own label (.card's font-size below) — the request
-     was for slot text to read at the same size as the table's cards. */
+     was for slot text to read at the same size as the table's cards. Wraps
+     instead of truncating with an ellipsis, same as .card-label — a long name
+     that still doesn't fit is clipped by .slot's own overflow:hidden rather
+     than hidden behind "…". */
   font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .slot-placeholder {
@@ -431,9 +431,6 @@
   font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   color: var(--ink);
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .slot-progress-track {
@@ -515,15 +512,10 @@
 }
 
 .deck-waste {
-  /* Its own scale, independent of the columns'/slots' --card-w — keeps the
-     draw pile compact so docking it in .top-row next to the category slots
-     doesn't force that row to wrap on a narrow phone. --card-h must be
-     redeclared here too: custom properties inherit their already-resolved
-     value, not the live formula, so without this it would keep using
-     .game-screen's --card-w (not this element's override) and produce a
-     too-tall, wrong-aspect-ratio card. */
-  --card-w: clamp(40px, 16vw, 76px);
-  --card-h: calc(var(--card-w) * 1.309);
+  /* Shares the columns'/slots' --card-w now — it sits in the same row as the
+     category slots (.top-row) and looked mismatched at its own smaller scale.
+     .top-row's flex-wrap handles it if that's ever too wide for a narrow
+     phone (wraps onto its own line rather than forcing a shrink). */
   display: flex;
   align-items: center;
   justify-content: center;
