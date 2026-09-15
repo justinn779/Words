@@ -34,22 +34,36 @@ export function topOf(pile: Card[]): Card | undefined {
   return pile.length > 0 ? pile[pile.length - 1] : undefined
 }
 
-/** The maximal run of contiguous, face-up, same-category word cards ending at the column top. */
-export function getRunStartIndex(state: GameState, columnIndex: number): number {
+/**
+ * The start of the maximal contiguous, face-up, same-category word run that
+ * contains `fromIndex` — walks backward through same-category neighbors only;
+ * whether the run also extends cleanly *up* to the column's physical top
+ * (what actually determines if it's movable) is a separate question, left to
+ * canMoveStack. Same-category cards are permanently bound together the
+ * instant they end up stacked (see game-rules.md) — a card index never picks
+ * out just a tail sub-run, only ever the whole bound group it belongs to.
+ */
+export function getBoundRunStart(state: GameState, columnIndex: number, fromIndex: number): number {
   const column = state.columns[columnIndex]
-  if (column.length === 0) return -1
-  let start = column.length - 1
-  const top = column[start]
-  if (!top.faceUp || top.cardType !== 'word') return start
+  if (fromIndex < 0 || fromIndex >= column.length) return fromIndex
+  const anchor = column[fromIndex]
+  if (!anchor.faceUp || anchor.cardType !== 'word') return fromIndex
+  let start = fromIndex
   while (start > 0) {
     const prev = column[start - 1]
-    if (prev.faceUp && prev.cardType === 'word' && prev.categoryId === top.categoryId) {
+    if (prev.faceUp && prev.cardType === 'word' && prev.categoryId === anchor.categoryId) {
       start--
     } else {
       break
     }
   }
   return start
+}
+
+/** The maximal run of contiguous, face-up, same-category word cards ending at the column top. */
+export function getRunStartIndex(state: GameState, columnIndex: number): number {
+  const column = state.columns[columnIndex]
+  return getBoundRunStart(state, columnIndex, column.length - 1)
 }
 
 export function totalCategoriesInLevel(state: GameState): number {

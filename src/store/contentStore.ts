@@ -9,9 +9,12 @@ import {
   getLoadedAiChapters,
   requestChapterGeneration,
   requestNewChapterGeneration,
+  AI_CHAPTER_IDS,
   type AiChapterEntry,
 } from '../firebase/aiChapters'
 import { refreshAiContent } from '../firebase/aiContent'
+import { getContentChapterOrder, hasContent } from '../data/progression'
+import { CHAPTERS } from '../data/chapters'
 
 /** Sentinel generatingChapterId while generateNewChapter's call is in flight —
  * there's no chapterId to key on yet (the server assigns one). */
@@ -23,6 +26,15 @@ interface ContentState {
   loadAiChapters: () => Promise<void>
   generateChapter: (chapterId: string) => Promise<{ ok: true } | { ok: false; message: string }>
   generateNewChapter: () => Promise<{ ok: true; chapterId: string } | { ok: false; message: string }>
+  /** Fire-and-forget: call whenever a player starts a level. If that level's
+   * chapter is the current content frontier (the newest chapter anyone has
+   * content for) and the chapter after it doesn't exist yet, kicks off
+   * generating that next one in the background — so by the time anyone
+   * actually reaches it, it's already there (or at least already in
+   * progress), instead of waiting for a star threshold and a manual button
+   * press. No-op if a generation is already running, chapterId isn't the
+   * frontier, or the next chapter already has content. */
+  ensureNextChapterGenerating: (chapterId: string) => void
 }
 
 export const useContentStore = create<ContentState>((set, get) => ({
@@ -61,5 +73,26 @@ export const useContentStore = create<ContentState>((set, get) => ({
     await refreshAiContent()
     set((s) => ({ aiChapters: { ...s.aiChapters, [result.chapterId]: result.entry }, generatingChapterId: null }))
     return { ok: true, chapterId: result.chapterId }
+  },
+
+  ensureNextChapterGenerating: (chapterId) => {
+    if (get().generatingChapterId) return
+    const extraLevels = Object.values(get().aiChapters).flatMap((e) => e.levels)
+    const contentOrder = getContentChapterOrder(extraLevels)
+    if (contentOrder[contentOrder.length - 1] !== chapterId) return // not the newest chapter with content
+
+    const fullOrder = CHAPTERS.map((c) => c.id)
+    const fullIndex = fullOrder.indexOf(chapterId)
+    const nextStaticId = fullIndex >= 0 && fullIndex < fullOrder.length - 1 ? fullOrder[fullIndex + 1] : undefined
+
+    if (nextStaticId) {
+      if ((AI_CHAPTER_IDS as readonly string[]).includes(nextStaticId) && !hasContent(nextStaticId, extraLevels)) {
+        void get().generateChapter(nextStaticId)
+      }
+      return
+    }
+    // Nothing left in the predefined roster beyond chapterId — invent an
+    // entirely new one, same as canGenerateNewChapter's manual button.
+    void get().generateNewChapter()
   },
 }))

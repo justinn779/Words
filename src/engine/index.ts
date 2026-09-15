@@ -11,4 +11,4 @@ export { recordHintUsed, recordCoinsSpent, HINT_LEVEL_1_COST, HINT_LEVEL_2_COST,
 export { solve } from './solver'
 export { generateSolvableLevel } from './generator'
 export type { GenerateOptions, GenerateResult, LevelConfigWithoutSeed } from './generator'
-export { findCard, getRunStartIndex } from './query'
+export { findCard, getRunStartIndex, getBoundRunStart } from './query'

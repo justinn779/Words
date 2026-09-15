@@ -515,8 +515,13 @@
 .deck-waste {
   /* Its own scale, independent of the columns'/slots' --card-w — keeps the
      draw pile compact so docking it in .top-row next to the category slots
-     doesn't force that row to wrap on a narrow phone. */
+     doesn't force that row to wrap on a narrow phone. --card-h must be
+     redeclared here too: custom properties inherit their already-resolved
+     value, not the live formula, so without this it would keep using
+     .game-screen's --card-w (not this element's override) and produce a
+     too-tall, wrong-aspect-ratio card. */
   --card-w: clamp(40px, 16vw, 76px);
+  --card-h: calc(var(--card-w) * 1.309);
   display: flex;
   align-items: center;
   justify-content: center;

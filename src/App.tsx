@@ -25,6 +25,8 @@ type Screen =
 function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' })
   const game = useGameStore((s) => s.game)
+  const levelConfig = useGameStore((s) => s.levelConfig)
+  const dailyDate = useGameStore((s) => s.dailyDate)
   const initCloud = usePlayerStore((s) => s.initCloud)
   const loadAiChapters = useContentStore((s) => s.loadAiChapters)
   const animationsOn = usePlayerStore((s) => s.settings.animationsOn)
@@ -43,6 +45,22 @@ function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('animations-off', !animationsOn)
   }, [animationsOn])
+
+  // Keeps the 'levels' screen pointed at whichever chapter is actually being
+  // played, even when WinModal jumps the player straight into a new chapter
+  // (its "下一章節"/"下一關" buttons call startLevel directly, bypassing
+  // setScreen) — otherwise exiting back out would land on the chapter the
+  // player *entered* the board from, not the one they were just playing.
+  // Daily Challenge levels don't have a real "levels" screen to return to
+  // (WinModal's own "返回每日挑戰" exits straight to the daily screen).
+  useEffect(() => {
+    if (!levelConfig || dailyDate) return
+    setScreen((prev) =>
+      prev.name === 'levels' && prev.chapterId === levelConfig.chapterId
+        ? prev
+        : { name: 'levels', chapterId: levelConfig.chapterId },
+    )
+  }, [levelConfig, dailyDate])
 
   if (game) return <Board />
 

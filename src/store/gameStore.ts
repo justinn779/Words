@@ -5,6 +5,7 @@ import {
   moveCard,
   moveStack,
   canMoveStack,
+  getBoundRunStart,
   drawDeckCard,
   recycleDeck,
   undo as engineUndo,
@@ -24,6 +25,7 @@ import { buildDailyLevelConfig, getTodayDateString } from '../data/dailyChalleng
 import { getLoadedAiContent } from '../firebase/aiContent'
 import { getLoadedAiChapters } from '../firebase/aiChapters'
 import { usePlayerStore } from './playerStore'
+import { useContentStore } from './contentStore'
 import { playSfx, type SfxName } from '../audio/sfx'
 
 function sfx(name: SfxName) {
@@ -136,10 +138,18 @@ function tryPickSelection(game: GameState, columnIndex: number, cardIndex: numbe
   if (isRunTop(game, columnIndex, cardIndex)) {
     return { kind: 'column', columnIndex, cardIndex, cardId: card.id }
   }
+  // Clicking anywhere inside a same-category run always picks up the WHOLE
+  // bound group from its true start, never just the tail from the clicked
+  // card — otherwise a click partway into a long run could split off and
+  // move only its top portion, leaving the rest of that same-category group
+  // behind on its own (see getBoundRunStart).
+  const start = getBoundRunStart(game, columnIndex, cardIndex)
   // Delegate to the engine's canMoveStack so "what counts as a pickable stack" (a
   // same-category word run, optionally capped by that category's parked Category
   // Card) lives in exactly one place.
-  return canMoveStack(game, columnIndex, cardIndex) ? { kind: 'column', columnIndex, cardIndex, cardId: card.id } : null
+  return canMoveStack(game, columnIndex, start)
+    ? { kind: 'column', columnIndex, cardIndex: start, cardId: column[start].id }
+    : null
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -170,6 +180,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       dailyDate: null,
       winUnlocks: null,
     })
+    // Starting a level in the current content frontier chapter is the signal
+    // to begin generating the next one, rather than waiting for a star
+    // threshold and a manual button press — see ensureNextChapterGenerating.
+    useContentStore.getState().ensureNextChapterGenerating(levelConfig.chapterId)
   },
 
   startDailyLevel: (difficulty) => {
