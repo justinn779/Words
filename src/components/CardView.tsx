@@ -10,6 +10,13 @@ function captureRects(cardIds: string[]): Record<string, DragRect> {
   for (const id of cardIds) {
     const el = document.querySelector<HTMLElement>(`[data-card-id="${CSS.escape(id)}"]`)
     if (el) {
+      // A card just drawn from the deck (or flipped face up) can still be
+      // mid-flight through .card-reveal's entrance animation (scaleX/rotateY)
+      // when the player starts dragging it. getBoundingClientRect() reflects
+      // that animated transform, so without this the drag would capture —
+      // and freeze for its whole duration — a squished, barely-visible box
+      // instead of the card's settled size. Snap it to its end state first.
+      el.getAnimations().forEach((anim) => anim.finish())
       const r = el.getBoundingClientRect()
       rects[id] = { top: r.top, left: r.left, width: r.width, height: r.height }
     }
