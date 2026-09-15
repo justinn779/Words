@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { CHAPTERS } from '../data/chapters'
 import {
   getChapterDisplayTitle,
@@ -44,6 +44,29 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
   const canGenerateNewChapter = allStaticChaptersFilled && isNextNewChapterGateOpen(levelRecords, extraLevels)
   const generatingNewChapter = generatingChapterId === GENERATING_NEW_CHAPTER
 
+  const rowStats = rows.map((chapter) => ({
+    ...chapter,
+    playable: hasContent(chapter.id, extraLevels) && isChapterUnlocked(chapter.id, levelRecords, extraLevels),
+    stars: getChapterStars(chapter.id, levelRecords, extraLevels),
+    maxStars: getChapterMaxStars(chapter.id, extraLevels),
+  }))
+  // The chapter the player is currently working through: the first playable
+  // one they haven't fully starred yet, or their last playable chapter if
+  // every playable one is already maxed out. undefined if nothing's playable
+  // yet (brand-new player) — nothing to scroll to in that case.
+  const currentChapter =
+    rowStats.find((r) => r.playable && r.stars < r.maxStars) ?? [...rowStats].reverse().find((r) => r.playable)
+
+  const rowRefs = useRef(new Map<string, HTMLLIElement>())
+  useEffect(() => {
+    if (!currentChapter) return
+    rowRefs.current.get(currentChapter.id)?.scrollIntoView({ block: 'center' })
+    // Only re-run when *which* chapter counts as current changes, not on every
+    // render — a player scrolled elsewhere in the list shouldn't get yanked
+    // back on an unrelated re-render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentChapter?.id])
+
   const handleGenerate = async (chapterId: string) => {
     setGenError(null)
     const result = await generateChapter(chapterId)
@@ -65,10 +88,8 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
         <h1>目錄</h1>
       </div>
       <ul className="chapter-list">
-        {rows.map((chapter) => {
-          const playable = hasContent(chapter.id, extraLevels) && isChapterUnlocked(chapter.id, levelRecords, extraLevels)
-          const stars = getChapterStars(chapter.id, levelRecords, extraLevels)
-          const maxStars = getChapterMaxStars(chapter.id, extraLevels)
+        {rowStats.map((chapter) => {
+          const { playable, stars, maxStars } = chapter
           const levelCount = getChapterLevels(chapter.id, extraLevels).length
           const generating = generatingChapterId === chapter.id
           const canGenerate =
@@ -76,7 +97,13 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
             (AI_CHAPTER_IDS as readonly string[]).includes(chapter.id) &&
             isChapterStarGateOpen(chapter.id, levelRecords, extraLevels)
           return (
-            <li key={chapter.id}>
+            <li
+              key={chapter.id}
+              ref={(el) => {
+                if (el) rowRefs.current.set(chapter.id, el)
+                else rowRefs.current.delete(chapter.id)
+              }}
+            >
               <button
                 type="button"
                 className="chapter-item"

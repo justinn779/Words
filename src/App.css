@@ -39,14 +39,28 @@
 
 .home-profile {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  align-items: center;
+  gap: 8px;
   padding: 6px 14px;
   border-radius: var(--radius);
   border: 1px solid var(--paper-deep);
   background: var(--card-bg);
   text-align: left;
+}
+
+.home-profile-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.home-profile-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
 }
 
 .home-profile-name {
@@ -64,12 +78,23 @@
   font-weight: 600;
 }
 
+.home-book {
+  /* Room for the page-stack effect (see .home-book-cover::before/::after)
+     peeking out past the cover's own box on the bottom-right. */
+  padding: 0 10px 10px 0;
+}
+
 .home-book-cover {
-  width: 220px;
-  height: 280px;
+  width: min(85vw, 340px);
+  aspect-ratio: 3 / 4;
   background: linear-gradient(160deg, var(--wood) 0%, var(--wood-dark) 100%);
-  border-radius: 8px 14px 14px 8px;
-  box-shadow: var(--shadow-lift);
+  border-radius: 8px 16px 16px 8px;
+  /* box-shadow (not a pseudo-element) for the page-stack effect: a shadow
+     always paints behind the element's own background, so unlike a
+     z-index:-1 pseudo-element (which still paints *over* the parent's own
+     background per the stacking spec) it can never hide the cover or its
+     text — it only shows in the margin the two layers peek out into. */
+  box-shadow: var(--shadow-lift), 6px 6px 0 0 var(--paper), 11px 11px 0 0 var(--paper-deep);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -85,7 +110,7 @@
 }
 
 .home-title {
-  font-size: 28px;
+  font-size: clamp(24px, 7vw, 32px);
   font-weight: 700;
   letter-spacing: 2px;
 }
@@ -97,7 +122,7 @@
 }
 
 .home-book-icon {
-  font-size: 40px;
+  font-size: clamp(36px, 10vw, 48px);
   margin-top: 8px;
 }
 
@@ -403,7 +428,12 @@
   color: var(--ink-soft);
 }
 
-.table-area {
+/* Desktop (default): the classic solitaire look — columns and the draw pile
+   share one row, both at the same --card-w. Below 720px (see the media query
+   at the bottom of this file) this switches to a phone-specific layout: the
+   draw pile moves above the columns at its own smaller scale, so it never
+   shrinks the columns' width/height budget on a narrow screen. */
+.table-row {
   flex: 1 1 auto;
   min-height: 60px;
   min-width: 0;
@@ -414,17 +444,21 @@
   overflow: hidden;
 }
 
+.table-area {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .columns-row {
   flex: 0 1 auto;
   display: flex;
-  flex-wrap: wrap;
-  align-content: center;
-  justify-content: center;
   gap: var(--card-gap);
   min-width: 0;
-  /* No scrollbar, ever — the card width (Board.tsx) picks the row/column
-     count that fills the available width and height, so wrapping here never
-     needs to scroll. */
+  /* Always a single line — never wraps. No scrollbar either: the card width
+     (Board.tsx) is sized so the row fits. */
   overflow: visible;
 }
 
@@ -445,9 +479,6 @@
 }
 
 .deck-waste {
-  /* Own row, own scale — independent of the columns' --card-w so the draw
-     pile never eats into the columns' width/height budget (see Board.tsx). */
-  --card-w: clamp(40px, 16vw, 76px);
   display: flex;
   justify-content: center;
   gap: var(--card-gap);
@@ -898,6 +929,17 @@
   .game-screen {
     padding: 8px 8px 20px;
     --card-gap: 6px;
+  }
+
+  /* Phone-specific board layout: stack the draw pile above the columns
+     instead of sharing their row (see .table-row above), at its own smaller,
+     independent scale so it never shrinks the columns' width/height budget. */
+  .table-row {
+    flex-direction: column;
+  }
+  .deck-waste {
+    order: -1;
+    --card-w: clamp(40px, 16vw, 76px);
   }
 }
 

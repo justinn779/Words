@@ -14,12 +14,13 @@ export interface AuthState {
   status: AuthStatus
   uid: string | null
   displayName: string | null
+  photoURL: string | null
 }
 
 function describeUser(user: User | null): AuthState {
-  if (!user) return { status: 'signed-out', uid: null, displayName: null }
+  if (!user) return { status: 'signed-out', uid: null, displayName: null, photoURL: null }
   const isGoogleLinked = user.providerData.some((p) => p.providerId === 'google.com')
-  return { status: isGoogleLinked ? 'google' : 'anonymous', uid: user.uid, displayName: user.displayName }
+  return { status: isGoogleLinked ? 'google' : 'anonymous', uid: user.uid, displayName: user.displayName, photoURL: user.photoURL }
 }
 
 /**
@@ -31,7 +32,7 @@ function describeUser(user: User | null): AuthState {
  */
 export function initAuth(onChange: (state: AuthState) => void): () => void {
   if (!firebaseEnabled) {
-    onChange({ status: 'disabled', uid: null, displayName: null })
+    onChange({ status: 'disabled', uid: null, displayName: null, photoURL: null })
     return () => {}
   }
 
@@ -113,4 +114,19 @@ export async function completeGoogleLinkRedirect(): Promise<AuthState | null> {
   })
   if (!result) return null
   return describeUser(result.user)
+}
+
+/**
+ * Signs the current user out entirely. initAuth()'s onAuthStateChanged listener
+ * reacts to the resulting null user by immediately starting a *fresh* anonymous
+ * sign-in (a new uid, unrelated to the one just signed out of) — this is how a
+ * player leaves a Google-linked account without the app being left signed out.
+ * Local progress (localStorage) is untouched either way; the old account's cloud
+ * progress stays under its own uid, safe from the new anonymous session's writes.
+ */
+export async function signOutUser(): Promise<void> {
+  const fb = await getFirebase()
+  if (!fb) return
+  const { signOut } = await import('firebase/auth')
+  await signOut(fb.auth)
 }

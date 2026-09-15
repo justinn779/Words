@@ -21,14 +21,18 @@ export default function Home({ onOpenChapters, onOpenDaily, onOpenMissions, onOp
   const coins = usePlayerStore((s) => s.coins)
   const authStatus = usePlayerStore((s) => s.authStatus)
   const displayName = usePlayerStore((s) => s.displayName)
+  const photoURL = usePlayerStore((s) => s.photoURL)
   const profileName = displayName || AUTH_SHORT_LABEL[authStatus] || authStatus
 
   return (
     <div className="home-screen">
       <div className="home-header">
         <button type="button" className="home-profile" onClick={onOpenSettings} aria-label={`帳號：${profileName}，前往設定`}>
-          <span className="home-profile-name">{profileName}</span>
-          <span className="home-profile-coins">🪙 {coins}</span>
+          {photoURL && <img className="home-profile-avatar" src={photoURL} alt="" referrerPolicy="no-referrer" />}
+          <span className="home-profile-text">
+            <span className="home-profile-name">{profileName}</span>
+            <span className="home-profile-coins">🪙 {coins}</span>
+          </span>
         </button>
         <button type="button" className="home-settings-button" onClick={onOpenSettings} aria-label="設定">
           ⚙

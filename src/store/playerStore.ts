@@ -4,7 +4,7 @@ import { MISSIONS, getWeekKey, type MissionStatKey } from '../data/missions'
 import { ACHIEVEMENTS, type Statistics } from '../data/achievements'
 import { getTodayDateString, previousDateString } from '../data/dailyChallenge'
 import { firebaseEnabled } from '../firebase/config'
-import { initAuth, linkGoogleAccount, completeGoogleLinkRedirect, type AuthStatus } from '../firebase/auth'
+import { initAuth, linkGoogleAccount, completeGoogleLinkRedirect, signOutUser, type AuthStatus } from '../firebase/auth'
 import { loadProfile, saveProfile } from '../firebase/sync'
 import { playSfx } from '../audio/sfx'
 
@@ -169,6 +169,8 @@ interface PlayerStore {
   /** Google account's display name once linked (src/firebase/auth.ts) — null for
    * every other authStatus (disabled/signed-out/anonymous never have one). */
   displayName: string | null
+  /** Google account's profile photo URL once linked — null otherwise, same as displayName. */
+  photoURL: string | null
 
   spendCoins: (amount: number) => boolean
   addCoins: (amount: number) => void
@@ -185,6 +187,10 @@ interface PlayerStore {
    * (never rejects) with the outcome so Settings can show *why* a failure happened
    * instead of just "nothing happened" — see AUTH_LINK_ERROR_LABEL in Settings.tsx. */
   linkGoogle: () => Promise<{ ok: true } | { ok: false; code?: string }>
+  /** Signs out of the current account (Google-linked or anonymous). Local progress
+   * stays safely in localStorage; initCloud's listener starts a fresh anonymous
+   * session right after — see signOutUser() in src/firebase/auth.ts. */
+  signOut: () => Promise<void>
 }
 
 const initial = load()
@@ -216,6 +222,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   updatedAt: initial.updatedAt,
   authStatus: firebaseEnabled ? 'signed-out' : 'disabled',
   displayName: null,
+  photoURL: null,
 
   spendCoins: (amount) => {
     const { coins } = get()
@@ -351,7 +358,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     cloudInitStarted = true
 
     initAuth((authState) => {
-      set({ authStatus: authState.status, displayName: authState.displayName })
+      set({ authStatus: authState.status, displayName: authState.displayName, photoURL: authState.photoURL })
       if (!authState.uid || authState.uid === cloudUid) return
       cloudUid = authState.uid
 
@@ -377,7 +384,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // A no-op on any normal page load with no pending redirect.
     completeGoogleLinkRedirect()
       .then((state) => {
-        if (state) set({ authStatus: state.status, displayName: state.displayName })
+        if (state) set({ authStatus: state.status, displayName: state.displayName, photoURL: state.photoURL })
       })
       .catch((err) => console.error('[firebase] Google redirect link failed', err))
   },
@@ -385,12 +392,20 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   linkGoogle: async () => {
     try {
       const state = await linkGoogleAccount()
-      set({ authStatus: state.status, displayName: state.displayName })
+      set({ authStatus: state.status, displayName: state.displayName, photoURL: state.photoURL })
       return { ok: true }
     } catch (err) {
       console.error('[firebase] Google account link failed', err)
       const code = (err as { code?: string })?.code
       return { ok: false, code }
+    }
+  },
+
+  signOut: async () => {
+    try {
+      await signOutUser()
+    } catch (err) {
+      console.error('[firebase] sign-out failed', err)
     }
   },
 }))

@@ -28,8 +28,10 @@ export default function Settings({ onBack }: SettingsProps) {
   const setTutorialSeen = usePlayerStore((s) => s.setTutorialSeen)
   const authStatus = usePlayerStore((s) => s.authStatus)
   const linkGoogle = usePlayerStore((s) => s.linkGoogle)
+  const signOut = usePlayerStore((s) => s.signOut)
   const [linking, setLinking] = useState(false)
   const [linkError, setLinkError] = useState<string | null>(null)
+  const [signingOut, setSigningOut] = useState(false)
 
   const handleLinkGoogle = async () => {
     setLinking(true)
@@ -39,6 +41,17 @@ export default function Settings({ onBack }: SettingsProps) {
     if (!result.ok) {
       setLinkError((result.code && AUTH_LINK_ERROR_LABEL[result.code]) ?? '綁定失敗，請再試一次')
     }
+  }
+
+  const handleSignOut = async () => {
+    const confirmMessage =
+      authStatus === 'google'
+        ? '登出後這台裝置會改用新的訪客身分，確定要登出嗎？（雲端進度已安全保留在此 Google 帳號中）'
+        : '登出後這台裝置會改用新的訪客身分，確定要登出嗎？'
+    if (!window.confirm(confirmMessage)) return
+    setSigningOut(true)
+    await signOut()
+    setSigningOut(false)
   }
 
   return (
@@ -85,6 +98,14 @@ export default function Settings({ onBack }: SettingsProps) {
             </span>
             <button type="button" className="settings-toggle" onClick={handleLinkGoogle} disabled={linking}>
               {linking ? '綁定中…' : '綁定'}
+            </button>
+          </li>
+        )}
+        {(authStatus === 'google' || authStatus === 'anonymous') && (
+          <li className="settings-row">
+            <span>登出</span>
+            <button type="button" className="settings-toggle" onClick={handleSignOut} disabled={signingOut}>
+              {signingOut ? '登出中…' : '登出'}
             </button>
           </li>
         )}
