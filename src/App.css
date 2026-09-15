@@ -229,6 +229,12 @@
   max-width: 1200px;
   width: 100%;
   margin: 0 auto;
+  /* The whole game screen fits the viewport with no page-level scrollbar —
+     .table-area (flex: 1 below) absorbs whatever's left after HUD/category-
+     slots/todo-list, and Board.tsx sizes cards to fill exactly that much
+     height (as well as the available width) instead of a fixed max. */
+  min-height: 0;
+  overflow: hidden;
 
   /* Card geometry. --card-w is set per-level on the element (Board.tsx) so the
      whole table scales to fit the viewport; everything else derives from it. */
@@ -398,17 +404,27 @@
 }
 
 .table-area {
+  flex: 1 1 auto;
+  min-height: 60px;
+  min-width: 0;
   display: flex;
   gap: var(--card-gap);
-  align-items: flex-start;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
 }
 
 .columns-row {
   flex: 0 1 auto;
   display: flex;
+  flex-wrap: wrap;
+  align-content: center;
+  justify-content: center;
   gap: var(--card-gap);
   min-width: 0;
-  /* No scrollbar, ever — the card width (Board.tsx) is sized so the row fits. */
+  /* No scrollbar, ever — the card width (Board.tsx) picks the row/column
+     count that fills the available width and height, so wrapping here never
+     needs to scroll. */
   overflow: visible;
 }
 
@@ -429,7 +445,11 @@
 }
 
 .deck-waste {
+  /* Own row, own scale — independent of the columns' --card-w so the draw
+     pile never eats into the columns' width/height budget (see Board.tsx). */
+  --card-w: clamp(40px, 16vw, 76px);
   display: flex;
+  justify-content: center;
   gap: var(--card-gap);
   flex-shrink: 0;
 }
@@ -480,7 +500,7 @@
   justify-content: center;
   text-align: center;
   padding: 6px;
-  font-size: clamp(11px, calc(var(--card-w) * 0.19), 15px);
+  font-size: clamp(11px, calc(var(--card-w) * 0.19), 22px);
   font-weight: 600;
   user-select: none;
   touch-action: none;
@@ -599,6 +619,13 @@
   flex-wrap: wrap;
   gap: 6px 10px;
   padding-top: 4px;
+  /* Safety net, not the normal case: .game-screen never scrolls the page (see
+     its overflow: hidden), and .table-area's flex-sized cards already account
+     for this list's natural height — but a level with an unusually high
+     category count should scroll internally here rather than get silently
+     clipped by .game-screen's overflow. */
+  max-height: 30vh;
+  overflow-y: auto;
 }
 
 .todo-list li {
