@@ -1,20 +1,32 @@
 /* ---------- Home ---------- */
 .home-screen {
-  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 16px;
+}
+
+.home-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.home-main {
   flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 28px;
-  padding: 32px 16px;
+  padding: 16px 0;
   text-align: center;
 }
 
 .home-settings-button {
-  position: absolute;
-  top: 16px;
-  right: 16px;
   width: 40px;
   height: 40px;
   border-radius: 999px;
@@ -22,12 +34,10 @@
   background: var(--card-bg);
   font-size: 18px;
   color: var(--ink-soft);
+  flex-shrink: 0;
 }
 
 .home-profile {
-  position: absolute;
-  top: 16px;
-  left: 16px;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
