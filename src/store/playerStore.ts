@@ -166,6 +166,9 @@ interface PlayerStore {
   settings: PersistedShape['settings']
   updatedAt: number
   authStatus: AuthStatus
+  /** Google account's display name once linked (src/firebase/auth.ts) — null for
+   * every other authStatus (disabled/signed-out/anonymous never have one). */
+  displayName: string | null
 
   spendCoins: (amount: number) => boolean
   addCoins: (amount: number) => void
@@ -212,6 +215,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   settings: initial.settings,
   updatedAt: initial.updatedAt,
   authStatus: firebaseEnabled ? 'signed-out' : 'disabled',
+  displayName: null,
 
   spendCoins: (amount) => {
     const { coins } = get()
@@ -347,7 +351,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     cloudInitStarted = true
 
     initAuth((authState) => {
-      set({ authStatus: authState.status })
+      set({ authStatus: authState.status, displayName: authState.displayName })
       if (!authState.uid || authState.uid === cloudUid) return
       cloudUid = authState.uid
 
@@ -373,7 +377,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     // A no-op on any normal page load with no pending redirect.
     completeGoogleLinkRedirect()
       .then((state) => {
-        if (state) set({ authStatus: state.status })
+        if (state) set({ authStatus: state.status, displayName: state.displayName })
       })
       .catch((err) => console.error('[firebase] Google redirect link failed', err))
   },
@@ -381,7 +385,7 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   linkGoogle: async () => {
     try {
       const state = await linkGoogleAccount()
-      set({ authStatus: state.status })
+      set({ authStatus: state.status, displayName: state.displayName })
       return { ok: true }
     } catch (err) {
       console.error('[firebase] Google account link failed', err)
