@@ -318,6 +318,12 @@
   font-size: 13px;
 }
 
+.top-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .category-slots {
   display: flex;
   gap: 10px;
@@ -439,10 +445,11 @@
 }
 
 /* Desktop (default): the classic solitaire look — columns and the draw pile
-   share one row, both at the same --card-w. Below 720px (see the media query
-   at the bottom of this file) this switches to a phone-specific layout: the
-   draw pile moves above the columns at its own smaller scale, so it never
-   shrinks the columns' width/height budget on a narrow screen. */
+   (.deck-waste--side) share one row, both at the same --card-w. Below 720px
+   (see the media query at the bottom of this file) .deck-waste--side hides
+   and .deck-waste--top takes over instead, docked beside the category slots
+   in .top-row at its own smaller scale — see Board.tsx for why this is two
+   renders of the same component rather than one moved by CSS alone. */
 .table-row {
   flex: 1 1 auto;
   min-height: 60px;
@@ -501,6 +508,12 @@
   justify-content: center;
   gap: var(--card-gap);
   flex-shrink: 0;
+}
+
+/* Only one of these two is ever visible — see the media query at the bottom
+   of this file and the comment on .table-row above. */
+.deck-waste--top {
+  display: none;
 }
 
 .deck-pile {
@@ -949,14 +962,16 @@
     --card-gap: 6px;
   }
 
-  /* Phone-specific board layout: stack the draw pile above the columns
-     instead of sharing their row (see .table-row above), at its own smaller,
-     independent scale so it never shrinks the columns' width/height budget. */
-  .table-row {
-    flex-direction: column;
+  /* Phone-specific board layout: the draw pile docks beside the category
+     slots (.top-row) at its own smaller, independent scale instead of
+     sharing the columns' row, so it never shrinks their width/height budget. */
+  .deck-waste--top {
+    display: flex;
+  }
+  .deck-waste--side {
+    display: none;
   }
   .deck-waste {
-    order: -1;
     --card-w: clamp(40px, 16vw, 76px);
   }
   /* Hug the draw pile instead of sitting centered in .table-area's full

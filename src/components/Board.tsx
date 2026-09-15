@@ -59,11 +59,16 @@ export default function Board() {
   return (
     <div className="game-screen" style={{ '--card-w': cardWidth } as React.CSSProperties}>
       <HUD />
-      <CategorySlots />
-      {/* .table-row lays these out side by side on desktop (classic solitaire
-          layout, sharing one --card-w) and stacked on a narrow phone (its own
-          media query in App.css gives the draw pile a smaller, independent
-          scale there so it never shrinks the columns' budget). */}
+      {/* DeckWaste is rendered twice — once docked beside the category slots
+          (shown on a narrow phone, saving the vertical space a whole extra
+          row would cost) and once beside the columns (shown on desktop's
+          classic side-by-side solitaire layout). A media query in App.css
+          (.deck-waste--top / .deck-waste--side) shows exactly one at a time;
+          both read the same store, so which copy renders is purely visual. */}
+      <div className="top-row">
+        <CategorySlots />
+        <DeckWaste className="deck-waste--top" />
+      </div>
       <div className="table-row">
         <div className="table-area" ref={tableAreaRef}>
           <div className="columns-row">
@@ -72,7 +77,7 @@ export default function Board() {
             ))}
           </div>
         </div>
-        <DeckWaste />
+        <DeckWaste className="deck-waste--side" />
       </div>
       <TodoList />
       <WinModal />
