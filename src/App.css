@@ -340,6 +340,15 @@
   gap: 4px;
 }
 
+.slot-empty {
+  flex: 0 0 auto;
+  width: var(--card-w);
+  height: var(--card-h);
+  min-width: 0;
+  min-height: 0;
+  padding: 4px;
+}
+
 .slot-active {
   border-style: solid;
   border-color: var(--accent);
@@ -406,7 +415,8 @@
 
 .slot-placeholder {
   color: var(--ink-soft);
-  font-size: 13px;
+  font-size: clamp(10px, calc(var(--card-w) * 0.15), 13px);
+  text-align: center;
 }
 
 .slot-progress-track {
@@ -948,6 +958,14 @@
   .deck-waste {
     order: -1;
     --card-w: clamp(40px, 16vw, 76px);
+  }
+  /* Hug the draw pile instead of sitting centered in .table-area's full
+     height — any leftover room (a level whose columns are shorter than the
+     tallest possible stack) stays below the columns, ready for them to grow
+     into as the player draws more cards, instead of splitting into equal
+     gaps above and below. */
+  .table-area {
+    align-items: flex-start;
   }
 }
 
