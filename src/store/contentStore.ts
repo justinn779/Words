@@ -4,7 +4,13 @@
 // player's own settings/progress don't re-render on every content load.
 
 import { create } from 'zustand'
-import { ensureAiChaptersLoaded, getLoadedAiChapters, requestNewChapterGeneration, type AiChapterEntry } from '../firebase/aiChapters'
+import {
+  ensureAiChaptersLoaded,
+  getLoadedAiChapters,
+  hasAnyChapterEverBeenRequested,
+  requestNewChapterGeneration,
+  type AiChapterEntry,
+} from '../firebase/aiChapters'
 import { refreshAiContent } from '../firebase/aiContent'
 import { getContentChapterOrder } from '../data/progression'
 
@@ -38,8 +44,14 @@ export const useContentStore = create<ContentState>((set, get) => ({
     // Bootstrap: a brand-new install (or a freshly wiped database) has no
     // chapters at all yet — nothing would ever call ensureNextChapterGenerating
     // in that state (it only fires from starting a level, and there's no level
-    // to start), so kick off the very first chapter here instead.
-    if (Object.keys(aiChapters).length === 0 && !get().generatingChapterId) {
+    // to start), so kick off the very first chapter here instead. Gated on
+    // hasAnyChapterEverBeenRequested(), not just aiChapters being empty — a
+    // chapter still `status: 'generating'` (from this or another session) is
+    // invisible to aiChapters until it's ready, and without this check,
+    // reloading the page while chapter 1 is still generating looked identical
+    // to "nothing has ever been requested" and fired a duplicate, separately
+    // billed generation — confirmed happening in testing.
+    if (Object.keys(aiChapters).length === 0 && !hasAnyChapterEverBeenRequested() && !get().generatingChapterId) {
       void get().generateNewChapter()
     }
   },

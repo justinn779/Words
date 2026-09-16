@@ -24,11 +24,23 @@ export interface AiChapterEntry {
 }
 
 let cache: Record<string, AiChapterEntry> = {}
+let anyChapterEverRequested = false
 let loadPromise: Promise<void> | null = null
 
 /** Whatever AI-generated chapters have been loaded so far, keyed by chapterId. */
 export function getLoadedAiChapters(): Record<string, AiChapterEntry> {
   return cache
+}
+
+/** True if the `aiChapters` collection has ANY document at all — including one
+ * still `status: 'generating'`, not just ready ones. src/store/contentStore.ts's
+ * bootstrap (generate the very first chapter for a brand-new player) checks
+ * this, not just getLoadedAiChapters() being empty: without it, reloading the
+ * page while chapter 1 is still generating looks identical to "nothing has ever
+ * been requested" and fires a second, third, ... bootstrap generation — each a
+ * real, separately-billed OpenAI run — confirmed happening in testing. */
+export function hasAnyChapterEverBeenRequested(): boolean {
+  return anyChapterEverRequested
 }
 
 /** Starts the one-time background fetch of already-generated chapters, if it
@@ -48,15 +60,18 @@ async function loadAiChapters(): Promise<void> {
     // sign-in settled and was rejected outright with permission-denied.
     const signedIn = await waitForSignedInUser(fb.auth)
     if (!signedIn) return
-    const { collection, getDocsFromServer, query, where } = await import('firebase/firestore')
+    const { collection, getDocsFromServer } = await import('firebase/firestore')
     // getDocsFromServer, not getDocs — see the comment on the equivalent read in
     // aiContent.ts's loadAiContent for why a plain collection getDocs() can miss
-    // a document written moments earlier in the same session.
-    const snap = await getDocsFromServer(query(collection(fb.db, 'aiChapters'), where('status', '==', 'ready')))
+    // a document written moments earlier in the same session. No status filter —
+    // hasAnyChapterEverBeenRequested() below needs to see 'generating'/'failed'
+    // docs too, not just 'ready' ones.
+    const snap = await getDocsFromServer(collection(fb.db, 'aiChapters'))
+    anyChapterEverRequested = !snap.empty
     const next: Record<string, AiChapterEntry> = {}
     snap.forEach((doc) => {
-      const data = doc.data() as { levels?: LevelConfig[]; title?: string; order?: number }
-      if (Array.isArray(data.levels) && data.levels.length > 0) {
+      const data = doc.data() as { status?: string; levels?: LevelConfig[]; title?: string; order?: number }
+      if (data.status === 'ready' && Array.isArray(data.levels) && data.levels.length > 0) {
         next[doc.id] = { levels: data.levels, title: data.title, order: data.order }
       }
     })
