@@ -1,14 +1,10 @@
 // Client side of the "auto-generate the next chapter" feature: reads chapters the
 // Cloud Functions in functions/src/index.ts have already produced (public,
 // read-only `aiChapters/{chapterId}` collection — see firestore.rules), and can
-// call them to generate one on demand.
-//
-// Two generation modes, two Cloud Functions:
-//  - generateNextChapterNow fills in one of the 3 pre-named placeholder chapters
-//    (science-world/history-culture/curious-facts — see AI_CHAPTER_IDS).
-//  - generateNewChapterNow invents a brand-new chapter (theme + categories) once
-//    a player finishes every chapter src/data/chapters.ts knows about. Its
-//    chapterId is `ai-chapter-{order}`, order assigned sequentially server-side.
+// call generateNewChapterNow to invent one on demand. Every chapter — including
+// the very first one — is generated this way now; there is no fixed roster or
+// hand-authored content. A chapter's chapterId is `ai-chapter-{order}`, order
+// assigned sequentially server-side starting at 1.
 //
 // Like src/firebase/aiContent.ts, this is a small module-level cache, not a store:
 // the game must keep working with zero AI chapters (Firebase disabled, offline, or
@@ -18,14 +14,10 @@
 import type { LevelConfig } from '../engine/types'
 import { getFirebase, waitForSignedInUser } from './config'
 
-/** The 3 placeholder chapters from src/data/chapters.ts that scripts/generate-
- * levels.ts's PLAN deliberately leaves with zero hand-authored levels (see that
- * file's comment) — the only chapterIds generateNextChapterNow will generate. */
-export const AI_CHAPTER_IDS = ['science-world', 'history-culture', 'curious-facts'] as const
-
 export interface AiChapterEntry {
-  /** Absent for the 3 placeholder chapters (their title lives in src/data/
-   * chapters.ts instead) — present for every ai-chapter-{order} one. */
+  /** The short theme OpenAI invented for this chapter — absent if generation
+   * fell back entirely to the existing category pool with no AI-invented theme
+   * (see functions/src/index.ts's fillShortfallFromExistingPool). */
   title?: string
   order?: number
   levels: LevelConfig[]
@@ -96,30 +88,10 @@ function describeCallError(err: unknown): string {
 // while it's still working server-side.
 const CALL_TIMEOUT_MS = 300_000
 
-/** Calls generateNextChapterNow for chapterId (an AI_CHAPTER_IDS member). Updates
- * the local cache on success so getLoadedAiChapters() reflects it immediately. */
-export async function requestChapterGeneration(chapterId: string): Promise<GenerateChapterResult> {
-  const fb = await getFirebase()
-  if (!fb) return { ok: false, message: '雲端同步尚未啟用' }
-  try {
-    const { httpsCallable } = await import('firebase/functions')
-    const call = httpsCallable<{ chapterId: string }, { chapterId: string; levels: LevelConfig[] }>(
-      fb.functions,
-      'generateNextChapterNow',
-      { timeout: CALL_TIMEOUT_MS },
-    )
-    const result = await call({ chapterId })
-    const entry: AiChapterEntry = { levels: result.data.levels }
-    cache = { ...cache, [chapterId]: entry }
-    return { ok: true, chapterId, entry }
-  } catch (err) {
-    return { ok: false, message: describeCallError(err) }
-  }
-}
-
-/** Calls generateNewChapterNow to invent an entirely new chapter (theme +
- * categories) beyond src/data/chapters.ts's fixed roster. The server assigns
- * both the chapterId (`ai-chapter-{order}`) and the theme title. */
+/** Calls generateNewChapterNow to invent the next chapter (theme + categories).
+ * The server assigns both the chapterId (`ai-chapter-{order}`) and the theme
+ * title. Updates the local cache on success so getLoadedAiChapters() reflects
+ * it immediately. */
 export async function requestNewChapterGeneration(): Promise<GenerateChapterResult> {
   const fb = await getFirebase()
   if (!fb) return { ok: false, message: '雲端同步尚未啟用' }

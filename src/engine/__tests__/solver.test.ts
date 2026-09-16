@@ -1,36 +1,57 @@
 import { describe, expect, it } from 'vitest'
 import { createGame } from '../createGame'
-import { solve } from '../solver'
+import { generateSolvableLevel, type LevelConfigWithoutSeed } from '../generator'
 import { getAvailableMoves, getHint } from '../hint'
 import { CATEGORIES } from '../../data/categories'
 import { WORDS } from '../../data/words'
-import { LEVELS } from '../../data/levels'
+import { estimateTargets, totalCardCount } from '../../data/difficultyShapes'
 
-describe('solver — validates authored levels are winnable', () => {
-  // Every shipped level is already solver-verified at generation time (see
-  // scripts/generate-levels.ts and docs/level-generator.md) — re-solving all 30
-  // here would be far too slow for a test run, so this just spot-checks a couple
-  // of the smallest ('easy') ones as a fast regression check.
-  const smallLevels = LEVELS.filter((l) => l.difficulty === 'easy').slice(0, 2)
+// A small, fixed, no-deck fixture — deliberately decoupled from
+// DIFFICULTY_SHAPE's real easy/normal/hard numbers, which are large enough now
+// (see src/data/difficultyShapes.ts) that a plain DFS can take tens of seconds
+// per attempt and isn't guaranteed to find a solution at all — that's expected
+// and accepted for real generated content (see functions/src/index.ts's
+// fillShortfallFromExistingPool and the player-facing "❗ 回報無解" report flow),
+// not something these engine-level sanity checks should depend on. This fixture
+// only needs to be small enough to solve fast and reliably.
+const TEST_CATEGORY_IDS = ['fruit', 'animal', 'instrument']
+const TEST_WORDS_PER_CATEGORY = 3
 
-  for (const level of smallLevels) {
-    it(`level ${level.id} is solvable`, () => {
-      const state = createGame(level, CATEGORIES, WORDS)
-      const result = solve(state)
+function testLevelBase(id: string): LevelConfigWithoutSeed {
+  const categoryWordCounts = Object.fromEntries(TEST_CATEGORY_IDS.map((c) => [c, TEST_WORDS_PER_CATEGORY]))
+  return {
+    id,
+    chapterId: 'test',
+    difficulty: 'easy',
+    categoryIds: TEST_CATEGORY_IDS,
+    columnCount: 4,
+    categorySlotCount: 2,
+    deckEnabled: false,
+    deckSize: 0,
+    categoryWordCounts,
+    ...estimateTargets(totalCardCount(categoryWordCounts)),
+  }
+}
+
+describe('solver — validates small generated levels are winnable', () => {
+  const levels = ['solver-test-a', 'solver-test-b'].map((id) => generateSolvableLevel(testLevelBase(id), CATEGORIES, WORDS))
+
+  for (const result of levels) {
+    it(`level ${result.config.id} is solvable`, () => {
       expect(result.solvable).toBe(true)
     })
   }
 })
 
 describe('getAvailableMoves / getHint', () => {
+  const level = generateSolvableLevel(testLevelBase('solver-test-hint'), CATEGORIES, WORDS).config
+
   it('always offers at least one move on a freshly dealt board', () => {
-    const level = LEVELS[0]
     const state = createGame(level, CATEGORIES, WORDS)
     expect(getAvailableMoves(state).length).toBeGreaterThan(0)
   })
 
   it('hint level 1 omits the destination, level 2 includes it', () => {
-    const level = LEVELS[0]
     const state = createGame(level, CATEGORIES, WORDS)
     const hint1 = getHint(state, 1)
     const hint2 = getHint(state, 2)

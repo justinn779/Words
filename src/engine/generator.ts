@@ -1,8 +1,10 @@
 // The Phase 3 "generate -> solve -> accept/reject" authoring pipeline (spec section 29).
 // Given an author-picked knob set (everything except the seed), this tries seeds in
 // sequence until the solver confirms the dealt table is winnable, so no unsolvable
-// board is ever accepted. Used offline by scripts/generate-levels.ts; also usable at
-// runtime (e.g. Daily Challenge) since it's plain, side-effect-free TypeScript.
+// board is ever accepted (when it succeeds within budget — see
+// functions/src/index.ts's buildChapterLevels for what happens when it doesn't).
+// Plain, side-effect-free TypeScript, so it's usable both server-side (Cloud
+// Functions chapter generation) and at runtime (Daily Challenge).
 
 import type { Category, LevelConfig, WordEntry } from './types'
 import { createGame } from './createGame'

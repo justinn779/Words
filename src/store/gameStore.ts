@@ -20,9 +20,8 @@ import {
 } from '../engine'
 import { CATEGORIES } from '../data/categories'
 import { WORDS } from '../data/words'
-import { LEVELS } from '../data/levels'
 import { buildDailyLevelConfig, getTodayDateString } from '../data/dailyChallenge'
-import { getLoadedAiContent } from '../firebase/aiContent'
+import { getLoadedAiContent, ensureAiContentLoaded } from '../firebase/aiContent'
 import { getLoadedAiChapters } from '../firebase/aiChapters'
 import { reportUnsolvableLevel } from '../firebase/reports'
 import { usePlayerStore } from './playerStore'
@@ -79,7 +78,7 @@ interface GameStore {
   winUnlocks: WinUnlocks | null
 
   startLevel: (levelId: string) => void
-  startDailyLevel: (difficulty: LevelConfig['difficulty']) => void
+  startDailyLevel: (difficulty: LevelConfig['difficulty']) => Promise<void>
   clickCard: (loc: CardLoc) => void
   clickEmptyColumn: (columnIndex: number) => void
   clickSlot: (slotIndex: number) => void
@@ -109,8 +108,6 @@ function elapsedMs(game: GameState, nowTick: number): number {
 }
 
 function findLevel(levelId: string): LevelConfig {
-  const level = LEVELS.find((l) => l.id === levelId)
-  if (level) return level
   for (const entry of Object.values(getLoadedAiChapters())) {
     const aiLevel = entry.levels.find((l) => l.id === levelId)
     if (aiLevel) return aiLevel
@@ -204,9 +201,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
     useContentStore.getState().ensureNextChapterGenerating(levelConfig.chapterId)
   },
 
-  startDailyLevel: (difficulty) => {
+  startDailyLevel: async (difficulty) => {
     const date = getTodayDateString()
-    const levelConfig = buildDailyLevelConfig(date, difficulty)
+    // Daily Challenge's category pool now merges in AI-generated content (see
+    // dailyChallenge.ts), so this needs both loaded before it can pick categoryIds.
+    await ensureAiContentLoaded()
+    const levelConfig = await buildDailyLevelConfig(date, difficulty)
     const game = createGame(levelConfig, allCategories(), allWords())
     set({
       levelConfig,

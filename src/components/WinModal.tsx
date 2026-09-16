@@ -4,17 +4,7 @@ import { useGameStore } from '../store/gameStore'
 import { usePlayerStore } from '../store/playerStore'
 import { useContentStore } from '../store/contentStore'
 import { ACHIEVEMENTS } from '../data/achievements'
-import {
-  getChapterDisplayTitle,
-  getChapterLevels,
-  getContentChapterOrder,
-  hasContent,
-  isChapterStarGateOpen,
-  isChapterUnlocked,
-  isNextNewChapterGateOpen,
-} from '../data/progression'
-import { CHAPTERS } from '../data/chapters'
-import { AI_CHAPTER_IDS } from '../firebase/aiChapters'
+import { getChapterDisplayTitle, getChapterLevels, getContentChapterOrder, isChapterUnlocked, isNextNewChapterGateOpen } from '../data/progression'
 import { GENERATING_NEW_CHAPTER } from '../store/contentStore'
 import { DAILY_DIFFICULTIES } from '../data/dailyChallenge'
 
@@ -54,7 +44,6 @@ export default function WinModal() {
   const levelRecords = usePlayerStore((s) => s.levelRecords)
   const aiChapters = useContentStore((s) => s.aiChapters)
   const generatingChapterId = useContentStore((s) => s.generatingChapterId)
-  const generateChapter = useContentStore((s) => s.generateChapter)
   const generateNewChapter = useContentStore((s) => s.generateNewChapter)
   const [genError, setGenError] = useState<string | null>(null)
   const extraLevels = Object.values(aiChapters).flatMap((e) => e.levels)
@@ -75,44 +64,15 @@ export default function WinModal() {
   const nextChapterTitle = nextChapterId ? getChapterDisplayTitle(nextChapterId, contentOrder, aiChapters[nextChapterId]?.title) : undefined
   const showNextChapter = Boolean(nextChapterFirstLevel && nextChapterUnlocked)
 
-  // No next chapter has content yet — if the true next chapter (from the full
-  // CHAPTERS roster, not just what's authored/generated so far) is one of the
-  // AI-generatable placeholders and its star-gate is already open, offer to
-  // generate it right here instead of sending the player hunting through the menu.
-  const fullOrder = CHAPTERS.map((c) => c.id)
-  const fullOrderIndex = fullOrder.indexOf(levelConfig.chapterId)
-  const generatableChapterId =
-    !dailyDate && !nextLevel && !nextChapterId && fullOrderIndex >= 0 ? fullOrder[fullOrderIndex + 1] : undefined
-  const canGenerateNextChapter =
-    Boolean(generatableChapterId) &&
-    (AI_CHAPTER_IDS as readonly string[]).includes(generatableChapterId as string) &&
-    isChapterStarGateOpen(generatableChapterId as string, levelRecords, extraLevels)
-  const generatableChapterTitle = generatableChapterId ? CHAPTERS.find((c) => c.id === generatableChapterId)?.title : undefined
-  const generatingNextChapter = Boolean(generatableChapterId) && generatingChapterId === generatableChapterId
-
-  const handleGenerateNextChapter = async () => {
-    if (!generatableChapterId) return
-    setGenError(null)
-    const result = await generateChapter(generatableChapterId)
-    if (!result.ok) setGenError(result.message)
-  }
-
-  // Nothing predefined left at all (every chapters.ts entry, placeholders
-  // included, already has content) and the player just finished the actual last
-  // chapter in the combined order: offer to invent an entirely new one. Once it's
-  // generated, nextChapterId/showNextChapter above pick it up on the next render
-  // exactly like any other next chapter — no separate navigation needed here.
-  const lastStaticId = CHAPTERS[CHAPTERS.length - 1]?.id
-  const allStaticChaptersFilled = lastStaticId ? hasContent(lastStaticId, extraLevels) : true
-  const isAtCombinedFrontier = contentOrder[contentOrder.length - 1] === levelConfig.chapterId
-  const canGenerateNewChapter =
-    !dailyDate &&
-    !nextLevel &&
-    !nextChapterId &&
-    !canGenerateNextChapter &&
-    allStaticChaptersFilled &&
-    isAtCombinedFrontier &&
-    isNextNewChapterGateOpen(levelRecords, extraLevels)
+  // No next chapter exists yet and the player just finished the actual last
+  // chapter anyone has content for: offer to generate the next one right here
+  // instead of sending the player hunting through the menu (it also
+  // auto-generates on its own the moment they start any level in this chapter —
+  // see gameStore.ts's ensureNextChapterGenerating — this is just a shortcut).
+  // Once it's ready, nextChapterId/showNextChapter above pick it up on the next
+  // render exactly like any other next chapter — no separate navigation needed.
+  const isAtFrontier = contentOrder[contentOrder.length - 1] === levelConfig.chapterId
+  const canGenerateNewChapter = !dailyDate && !nextLevel && !nextChapterId && isAtFrontier && isNextNewChapterGateOpen(levelRecords, extraLevels)
   const generatingNewChapter = generatingChapterId === GENERATING_NEW_CHAPTER
 
   const handleGenerateNewChapter = async () => {
@@ -212,11 +172,11 @@ export default function WinModal() {
           {dailyDate ? (
             <>
               {nextDailyDifficulty && (
-                <button type="button" className="primary" onClick={() => startDailyLevel(nextDailyDifficulty)}>
+                <button type="button" className="primary" onClick={() => void startDailyLevel(nextDailyDifficulty)}>
                   下一關：{DAILY_DIFFICULTY_LABEL[nextDailyDifficulty] ?? nextDailyDifficulty}
                 </button>
               )}
-              <button type="button" onClick={() => startDailyLevel(levelConfig.difficulty)}>
+              <button type="button" onClick={() => void startDailyLevel(levelConfig.difficulty)}>
                 再玩一次
               </button>
               <button type="button" onClick={exitLevel}>
@@ -233,11 +193,6 @@ export default function WinModal() {
               {showNextChapter && nextChapterFirstLevel && (
                 <button type="button" className="primary" onClick={() => startLevel(nextChapterFirstLevel.id)}>
                   下一章節：{nextChapterTitle ?? ''}
-                </button>
-              )}
-              {canGenerateNextChapter && (
-                <button type="button" className="primary" disabled={generatingNextChapter} onClick={handleGenerateNextChapter}>
-                  {generatingNextChapter ? '生成中…' : `🪄 生成下一章：${generatableChapterTitle ?? ''}`}
                 </button>
               )}
               {canGenerateNewChapter && (

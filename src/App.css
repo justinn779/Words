@@ -224,22 +224,21 @@
   opacity: 0.5;
 }
 
-/* A chapter with nothing playable yet but whose star-gate is already open —
-   it auto-generates on its own (gameStore.ts's ensureNextChapterGenerating)
-   the moment the player starts a level in the current frontier chapter, no
-   button needed here. Distinct styling from .chapter-locked (truly nothing
-   to do yet) so this reads as "on its way", not "locked" or blank. */
+/* The next (not-yet-generated, id unknown until the server assigns one)
+   chapter — it auto-generates on its own (gameStore.ts's
+   ensureNextChapterGenerating) the moment the player starts a level in the
+   current frontier chapter, no button needed here. Distinct styling from
+   .chapter-locked (truly nothing to do yet) so this reads as "on its way". */
 .chapter-generatable {
   color: var(--accent);
   font-weight: 600;
 }
 
-.chapter-generate-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 6px;
-  padding: 0 4px;
+/* Non-interactive trailing row (ChapterList's "下一章" status) — same shape as
+   a real chapter-item button but visibly not clickable. */
+.chapter-item-pending {
+  opacity: 0.75;
+  cursor: default;
 }
 
 .level-difficulty {

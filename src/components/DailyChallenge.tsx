@@ -28,7 +28,7 @@ export default function DailyChallenge({ onBack }: DailyChallengeProps) {
           const result = todayResults[difficulty]
           return (
             <li key={difficulty}>
-              <button type="button" className="level-item" onClick={() => startDailyLevel(difficulty)}>
+              <button type="button" className="level-item" onClick={() => void startDailyLevel(difficulty)}>
                 <span className={`level-difficulty level-difficulty-${difficulty}`}>{DIFFICULTY_LABEL[difficulty]}</span>
                 <span className="level-stars">
                   {result ? '★'.repeat(result.stars) + '☆'.repeat(3 - result.stars) : '尚未完成'}

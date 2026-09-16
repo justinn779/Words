@@ -49,6 +49,25 @@ export function refreshAiContent(): Promise<void> {
   return loadPromise
 }
 
+interface AiCategoryDocLike {
+  categoryId?: unknown
+  name?: unknown
+  words?: unknown
+  createdAt?: { toMillis?: () => number }
+}
+
+function parseCategoryDoc(docId: string, data: AiCategoryDocLike): { category: Category; words: WordEntry[] } | null {
+  const categoryId = typeof data.categoryId === 'string' ? data.categoryId : docId
+  const name = typeof data.name === 'string' ? data.name : categoryId
+  const wordTexts = Array.isArray(data.words) ? data.words.filter((w): w is string => typeof w === 'string') : []
+  if (wordTexts.length === 0) return null
+  const wordIds = wordTexts.map((_, i) => `${categoryId}-ai-${i + 1}`)
+  return {
+    category: { id: categoryId, name, wordIds },
+    words: wordTexts.map((text, i) => ({ id: wordIds[i], text, possibleCategoryIds: [categoryId] })),
+  }
+}
+
 async function loadAiContent(): Promise<void> {
   try {
     const fb = await getFirebase()
@@ -70,15 +89,10 @@ async function loadAiContent(): Promise<void> {
     const categories: Category[] = []
     const words: WordEntry[] = []
     snap.forEach((doc) => {
-      const data = doc.data() as { categoryId?: unknown; name?: unknown; words?: unknown }
-      const categoryId = typeof data.categoryId === 'string' ? data.categoryId : doc.id
-      const name = typeof data.name === 'string' ? data.name : categoryId
-      const wordTexts = Array.isArray(data.words) ? data.words.filter((w): w is string => typeof w === 'string') : []
-      if (wordTexts.length === 0) return
-
-      const wordIds = wordTexts.map((_, i) => `${categoryId}-ai-${i + 1}`)
-      categories.push({ id: categoryId, name, wordIds })
-      wordTexts.forEach((text, i) => words.push({ id: wordIds[i], text, possibleCategoryIds: [categoryId] }))
+      const parsed = parseCategoryDoc(doc.id, doc.data() as AiCategoryDocLike)
+      if (!parsed) return
+      categories.push(parsed.category)
+      words.push(...parsed.words)
     })
 
     cache = { categories, words }
@@ -86,4 +100,46 @@ async function loadAiContent(): Promise<void> {
     // Never let a network/permission hiccup here affect the rest of the game.
     console.error('[firebase] failed to load AI-generated categories', err)
   }
+}
+
+const dailyPoolCache = new Map<number, Promise<AiContent>>()
+
+/** Same category source as getLoadedAiContent, but only categories created
+ * strictly before `cutoffMs` — used by Daily Challenge (src/data/
+ * dailyChallenge.ts) so every player who opens a given day's challenge, no
+ * matter when during that day, draws from the exact same category pool.
+ * Without this cutoff, a category accepted mid-day would silently join the
+ * pool for players who load after it but not before, breaking the "everyone
+ * gets the same board on the same day" guarantee a shared-seed daily challenge
+ * depends on. Memoized per cutoff so replaying the same day doesn't re-query. */
+export function loadAiCategoriesCreatedBefore(cutoffMs: number): Promise<AiContent> {
+  const cached = dailyPoolCache.get(cutoffMs)
+  if (cached) return cached
+  const promise = (async (): Promise<AiContent> => {
+    try {
+      const fb = await getFirebase()
+      if (!fb) return { categories: [], words: [] }
+      const signedIn = await waitForSignedInUser(fb.auth)
+      if (!signedIn) return { categories: [], words: [] }
+      const { collection, getDocsFromServer } = await import('firebase/firestore')
+      const snap = await getDocsFromServer(collection(fb.db, 'aiCategories'))
+      const categories: Category[] = []
+      const words: WordEntry[] = []
+      snap.forEach((doc) => {
+        const data = doc.data() as AiCategoryDocLike
+        const createdAtMs = data.createdAt?.toMillis?.() ?? 0
+        if (createdAtMs >= cutoffMs) return // too new — not part of that day's shared pool
+        const parsed = parseCategoryDoc(doc.id, data)
+        if (!parsed) return
+        categories.push(parsed.category)
+        words.push(...parsed.words)
+      })
+      return { categories, words }
+    } catch (err) {
+      console.error('[firebase] failed to load date-cutoff AI categories', err)
+      return { categories: [], words: [] }
+    }
+  })()
+  dailyPoolCache.set(cutoffMs, promise)
+  return promise
 }

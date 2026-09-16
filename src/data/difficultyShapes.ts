@@ -8,15 +8,17 @@ export interface DifficultyShape {
   deckEnabled: boolean
 }
 
-// Shared by the offline level generator (scripts/generate-levels.ts) and any
-// runtime level construction (Daily Challenge) so both always agree on what
-// "easy/normal/hard" means structurally. Every difficulty now deals a deck —
-// even 'easy' used to have none at all — and deckSize itself is no longer a
-// fixed per-difficulty constant here; see computeDeckSize below.
+// Shared by every runtime level construction path (AI-generated chapters, Daily
+// Challenge) so all of them agree on what "easy/normal/hard" means structurally.
+// Every difficulty deals a deck; deckSize itself is not a fixed per-difficulty
+// constant here — see computeDeckSize below. These numbers are deliberately
+// explicit (not derived) per product decision: more distinct categories than
+// slots/columns alone would suggest, so same-category runs stay spread out and
+// the sorting puzzle stays hard even at 'easy'.
 export const DIFFICULTY_SHAPE: Record<Difficulty, DifficultyShape> = {
-  easy: { categoryCount: 3, columnCount: 4, slotCount: 2, deckEnabled: true },
-  normal: { categoryCount: 4, columnCount: 5, slotCount: 2, deckEnabled: true },
-  hard: { categoryCount: 5, columnCount: 6, slotCount: 3, deckEnabled: true },
+  easy: { categoryCount: 6, columnCount: 3, slotCount: 2, deckEnabled: true },
+  normal: { categoryCount: 10, columnCount: 4, slotCount: 3, deckEnabled: true },
+  hard: { categoryCount: 15, columnCount: 5, slotCount: 4, deckEnabled: true },
 }
 
 export const WORDS_PER_CATEGORY: Record<Difficulty, number> = { easy: 4, normal: 5, hard: 6 }
@@ -72,18 +74,19 @@ export function computeDeckSize(categoryWordCounts: Record<string, number>): num
 }
 
 /**
- * Star/time thresholds scaled from card count using the ratios the Phase 1
- * hand-authored levels landed on (~1.8x cards for 2 stars; ~6.7s/card and
- * ~10s/card). The 3-star move ratio was bumped from the original 1.3x to 1.5x —
- * players were missing 3 stars on reasonably efficient clears, so the tolerance
- * needed more slack. Deliberately not derived from solver move counts — see
- * docs/solver.md for why a plain DFS's move count is a poor "par" estimate.
+ * Star/time thresholds scaled from card count. Loosened twice now — first from
+ * 1.3x to 1.5x on the 3-star move ratio, then again here across the board —
+ * because DIFFICULTY_SHAPE's category counts (and the bigger deck share before
+ * that) kept making boards harder while these ratios stayed put, so 2/3 stars
+ * kept getting harder to reach even on an efficient clear. Deliberately not
+ * derived from solver move counts — see docs/solver.md for why a plain DFS's
+ * move count is a poor "par" estimate.
  */
 export function estimateTargets(cardCount: number) {
   return {
-    targetThreeStarMoves: Math.round(cardCount * 1.5),
-    targetTwoStarMoves: Math.round(cardCount * 1.8),
-    targetThreeStarTime: Math.round(cardCount * 6.7),
-    targetTwoStarTime: Math.round(cardCount * 10),
+    targetThreeStarMoves: Math.round(cardCount * 1.9),
+    targetTwoStarMoves: Math.round(cardCount * 2.3),
+    targetThreeStarTime: Math.round(cardCount * 8.5),
+    targetTwoStarTime: Math.round(cardCount * 12.5),
   }
 }

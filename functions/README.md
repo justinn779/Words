@@ -9,13 +9,16 @@ through (`src/engine/generator.ts`), and only what passes ever reaches a player.
 1. **Category top-up** — `generateAndVerifyCategories` adds a few new categories
    to the shared pool (Firestore's public, read-only `aiCategories` collection —
    see `src/firebase/aiContent.ts` for how the client reads it back).
-2. **Auto-generated chapters** — `generateNextChapterNow` fills in one of the 3
-   placeholder chapters (`science-world`, `history-culture`, `curious-facts` —
-   see `src/data/chapters.ts`) with a full AI-generated difficulty curve, the
-   first time any player reaches that far. See "Auto-generated chapters" below.
+2. **Chapter generation** — `generateNewChapterNow` builds an entire chapter (a
+   full AI-generated difficulty curve) on demand. Every chapter works this way
+   now — there is no hand-authored/static content or fixed chapter roster
+   anymore (`src/data/levels.ts` and the old `src/data/chapters.ts` are gone);
+   chapter ids are `ai-chapter-{order}`, assigned sequentially starting at 1. See
+   "Chapter generation" below.
 
-Nothing about the core game changes: board layout, dealing, and win-condition logic
-stay 100% deterministic and offline.
+Board layout, dealing, and win-condition logic stay 100% deterministic given a
+level's config — but getting that config now requires this pipeline to have run
+first, so the game is no longer usable fully offline/without Firebase.
 
 ## One-time setup (needs your own accounts — can't be done for you)
 
@@ -35,10 +38,15 @@ stay 100% deterministic and offline.
 
    It prompts for the value with hidden input. Firebase stores it in Google Cloud
    Secret Manager and injects it only into the functions that declare it
-   (`dailyAiCategoryRefresh`, `generateAiCategoriesNow`, `generateNextChapterNow` —
+   (`dailyAiCategoryRefresh`, `generateAiCategoriesNow`, `generateNewChapterNow` —
    see `src/index.ts`'s `secrets: [OPENAI_API_KEY]`). The functions run fine before
    this step, they just fail (logged, not crashing anything else) whenever they
    actually try to call OpenAI.
+4. **Telegram bot token/chat id + (optional) other developer-notification
+   secrets** — `TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`, set the same way via
+   `firebase functions:secrets:set`, used by `notifyDeveloper` (chapter
+   generation start/success/failure, `reportUnsolvableLevel`, `notifyUserRegistered`).
+   Optional — every caller degrades to just logging if these aren't set.
 
 ## Deploying
 
@@ -68,48 +76,60 @@ firebase deploy --only functions
   3. Only categories that pass both checks are written to `aiCategories/{categoryId}`.
      Everything rejected is logged with a reason, never silently dropped.
 
-## Auto-generated chapters
+## Chapter generation
 
-`src/data/chapters.ts` pre-declares 3 chapter themes — `science-world`,
-`history-culture`, `curious-facts` — that `scripts/generate-levels.ts`'s `PLAN`
-deliberately leaves with zero hand-authored levels. `generateNextChapterNow`
-(callable, see `src/firebase/aiChapters.ts` for the client side) fills one of
-these in on demand, the first time any player reaches it:
+Every chapter — including the very first one a brand-new player sees —  is
+generated on demand by `generateNewChapterNow` (callable, see
+`src/firebase/aiChapters.ts` for the client side). There's no fixed roster: the
+server reserves the next sequential `order` via a Firestore counter
+(`meta/chapterCounter`) and assigns the chapterId `ai-chapter-{order}`.
 
-1. Checks Firestore `aiChapters/{chapterId}` first — if another player already
-   triggered this chapter, its stored levels are returned as-is (no OpenAI call).
-   A short-lived `status: 'generating'` lock avoids two simultaneous callers both
-   paying for generation (not a strict distributed lock — see the code comment on
-   `GENERATING_LOCK_TIMEOUT_MS` for the accepted trade-off).
-2. Otherwise asks OpenAI for a themed batch of categories (the chapter's title
-   hints the theme — see `CHAPTER_THEME_HINT`), verifies each exactly like the
+1. Asks OpenAI for both a short theme/title and a batch of categories to match
+   (no per-chapter topic constraint beyond that — an earlier version pinned 3
+   chapters to narrow fixed topics, which collided with itself often enough to
+   leave a chapter permanently stuck; see the code comment above `AI_CHAPTER_IDS`'s
+   old definition in git history). Verifies each candidate exactly like the
    category top-up above, and persists the accepted ones to `aiCategories` too
    (they also enrich the shared pool, not just this chapter).
+2. **Never gives up**: if OpenAI is unreachable, or doesn't yield enough
+   verified categories to clear `DIFFICULTY_SHAPE.hard.categoryCount`,
+   `fillShortfallFromExistingPool` tops up the shortfall from the existing pool
+   (built-in `SEED` plus every previously accepted AI category) instead of
+   failing outright — chapter generation cannot leave a player stuck on a
+   missing chapter. In the extreme case (OpenAI entirely down), the chapter
+   still gets built, just with no AI-invented title and entirely
+   already-known categories (`src/data/progression.ts`'s `getChapterDisplayTitle`
+   renders that as a plain "第N章").
 3. Builds a `['easy','easy','normal','normal','hard']` level curve from the
-   accepted pool — the same shape `scripts/generate-levels.ts`'s `generateChapter`
-   uses for hand-authored chapters, just reused in `buildChapterLevels` over
-   freshly-generated categories instead of the static built-in ones. Every level
-   goes through the same solver-verified generator, exactly like every other
-   level in the game.
-4. Writes the result to `aiChapters/{chapterId}` (`status: 'ready'`) so every
-   later player reuses it via step 1.
+   resulting pool (`buildChapterLevels`). Every level goes through the same
+   solver-verified generator every level in the game always has — a level that
+   doesn't solve within budget still ships (logged as unsolved) rather than
+   blocking the whole chapter; see the player-facing "❗ 回報無解" report flow
+   (`reportUnsolvableLevel` below) for the safety net that exists because of this.
+4. Writes the result to `aiChapters/{chapterId}` (`status: 'ready'`).
 
 The client (`src/store/contentStore.ts`, wired into `ChapterList.tsx`/
-`WinModal.tsx`) only offers to generate a chapter once its star-gate is already
-open (see `isChapterStarGateOpen` in `src/data/progression.ts`) — same 50%-of-
-previous-chapter's-stars rule as the hand-authored chapters.
+`WinModal.tsx`, and bootstrapped automatically for a player with zero chapters
+yet) only offers to generate the next chapter once the current last chapter's
+star-gate is already open (`isNextNewChapterGateOpen` in
+`src/data/progression.ts`) — 50% of that chapter's stars.
 
-## Known scope limits (intentionally not built yet)
+## Developer notifications
 
-An infinite-challenge mode that pre-generates the next level on the fly, and
-folding AI categories into Daily Challenge, still need real game-mode/UI work —
-this pipeline is content-generation only, reused by whatever calls it.
+`notifyDeveloper` sends a Telegram message (see the secrets section above) for:
+chapter generation start/success/failure, a player reporting a level as
+unsolvable (`reportUnsolvableLevel`, deduped per level while unresolved), and a
+player linking a persistent account (`notifyUserRegistered`, deduped per uid —
+not every anonymous first-visit sign-in, which happens far too often to be a
+meaningful signal).
 
-Daily Challenge in particular is **not** wired up to `aiCategories`/`aiChapters`
-yet on purpose: every player must see the exact same board for a given date
-(`src/data/dailyChallenge.ts`'s whole design), and naively picking from
-"whatever's in Firestore right now" would let two players who load the page a
-few minutes apart — straddling exactly when new content lands — see different
-boards. Fixing that means filtering by `createdAt` to a date cutoff, not just
-reading the live collection. Worth doing before Daily Challenge uses this;
-skipped for now rather than shipped with that edge case unhandled.
+## Daily Challenge and AI content
+
+`src/data/dailyChallenge.ts` merges the built-in `SEED` pool with AI-generated
+categories, filtered to only those `createdAt` strictly before that day's local
+midnight (`loadAiCategoriesCreatedBefore` in `src/firebase/aiContent.ts`) — so
+every player who opens a given day's challenge, no matter when during the day,
+draws from the exact same category pool. Without that cutoff, a category
+accepted mid-day would silently join the pool for players loading afterward but
+not before, breaking the "everyone sees the same board on the same day"
+guarantee the shared-seed design depends on.

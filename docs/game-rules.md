@@ -98,12 +98,16 @@ This is the game's central mechanic:
 
 ## Chapter and level unlocking (`src/data/progression.ts`)
 
-- Chapters play in a fixed order (`CONTENT_CHAPTER_ORDER`). The first is always
-  unlocked; each later one unlocks once the *previous* chapter has earned at least
-  50% of its maximum possible stars (`isChapterUnlocked`).
-- A chapter with no authored levels (science-world, history-culture, curious-facts —
-  see `scripts/generate-levels.ts`'s `PLAN`) is never unlockable regardless of stars;
-  it's shown as permanently "coming soon."
+- There is no fixed chapter roster — every chapter is generated on demand
+  (`ai-chapter-{order}`, see `functions/README.md`), in play order by that
+  numeric order (`getContentChapterOrder`). The first is always unlocked once it
+  has content; each later one unlocks once the *previous* chapter has earned at
+  least 50% of its maximum possible stars (`isChapterUnlocked`).
+- A chapter that hasn't been generated yet is never unlockable regardless of
+  stars — it just doesn't appear in the list until it exists. The client
+  auto-triggers generating the next chapter once the current last chapter's
+  star-gate opens (`isNextNewChapterGateOpen`), including bootstrapping the very
+  first chapter for a brand-new player with nothing generated yet.
 - Within an unlocked chapter, the first level is always open; each further level
   unlocks once the previous one has been completed at least once, i.e. ≥ 1 star
   (`isLevelUnlocked`).
