@@ -438,11 +438,15 @@ function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntr
     // 'hard') made a plain DFS at the previous budget (5 attempts x 30000
     // states) take long enough per level that a whole chapter could blow the
     // timeout entirely, exactly like scripts/generate-levels.ts's old default
-    // budget once did offline (see difficultyShapes.ts's history). A level
-    // that doesn't solve within budget still ships (see unsolvedIds) — same
-    // "log it, don't block" trade-off generateAndVerifyCategories takes; the
-    // player-facing "❗ 回報無解" report flow is the actual safety net now.
-    const result = generateSolvableLevel(base, pool, words, { maxAttempts: 2, maxStates: 5000 })
+    // budget once did offline (see difficultyShapes.ts's history). Dropping all
+    // the way to 2x5000 fixed the timeout but solved ~0% of levels — this is a
+    // middle ground with real headroom against the 300s ceiling (~1 minute used
+    // per chapter in testing) while still finding real solutions meaningfully
+    // more often. A level that doesn't solve within budget still ships (see
+    // unsolvedIds) — same "log it, don't block" trade-off
+    // generateAndVerifyCategories takes; the player-facing "❗ 回報無解" report
+    // flow is the actual safety net now.
+    const result = generateSolvableLevel(base, pool, words, { maxAttempts: 3, maxStates: 15000 })
     const targets = estimateTargets(totalCardCount(categoryWordCounts))
     if (!result.solvable) unsolvedIds.push(result.config.id)
     levels.push({ ...result.config, ...targets })
