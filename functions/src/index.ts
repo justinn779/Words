@@ -25,7 +25,7 @@ import type { Category, Difficulty, LevelConfig, WordEntry } from '../../src/eng
 import { generateSolvableLevel, type LevelConfigWithoutSeed } from '../../src/engine/generator'
 import { createRng, shuffle } from '../../src/engine/rng'
 import { SEED } from '../../src/data/seed'
-import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets } from '../../src/data/difficultyShapes'
+import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets, computeDeckSize } from '../../src/data/difficultyShapes'
 import { CHAPTERS } from '../../src/data/chapters'
 import { generateCategories, generateNewChapterContent, reviewCategories, type GeneratedCategory } from './openai'
 
@@ -367,7 +367,7 @@ function buildChapterLevelBase(
     columnCount: shape.columnCount,
     categorySlotCount: shape.slotCount,
     deckEnabled: shape.deckEnabled,
-    deckSize: shape.deckSize,
+    deckSize: computeDeckSize(categoryWordCounts),
     categoryWordCounts,
     targetThreeStarMoves: 0,
     targetTwoStarMoves: 0,
