@@ -224,6 +224,17 @@
   opacity: 0.5;
 }
 
+/* A chapter with nothing playable yet but whose star-gate is already open —
+   unlike .chapter-locked (nothing to do here yet), this row's disabled button
+   still leads straight to the "🪄 用 AI 生成本章" row right under it, so it
+   reads as "ready", not "locked". Without this the row's right side was
+   simply blank — inconsistent next to every sibling row always showing
+   something there (stars or a lock reason). */
+.chapter-generatable {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .chapter-generate-row {
   display: flex;
   align-items: center;

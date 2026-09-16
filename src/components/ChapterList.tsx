@@ -44,18 +44,30 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
   const canGenerateNewChapter = allStaticChaptersFilled && isNextNewChapterGateOpen(levelRecords, extraLevels)
   const generatingNewChapter = generatingChapterId === GENERATING_NEW_CHAPTER
 
-  const rowStats = rows.map((chapter) => ({
-    ...chapter,
-    playable: hasContent(chapter.id, extraLevels) && isChapterUnlocked(chapter.id, levelRecords, extraLevels),
-    stars: getChapterStars(chapter.id, levelRecords, extraLevels),
-    maxStars: getChapterMaxStars(chapter.id, extraLevels),
-  }))
-  // The chapter the player is currently working through: the first playable
-  // one they haven't fully starred yet, or their last playable chapter if
-  // every playable one is already maxed out. undefined if nothing's playable
-  // yet (brand-new player) — nothing to scroll to in that case.
+  const rowStats = rows.map((chapter) => {
+    const playable = hasContent(chapter.id, extraLevels) && isChapterUnlocked(chapter.id, levelRecords, extraLevels)
+    const levelCount = getChapterLevels(chapter.id, extraLevels).length
+    return {
+      ...chapter,
+      playable,
+      stars: getChapterStars(chapter.id, levelRecords, extraLevels),
+      maxStars: getChapterMaxStars(chapter.id, extraLevels),
+      canGenerate:
+        levelCount === 0 &&
+        (AI_CHAPTER_IDS as readonly string[]).includes(chapter.id) &&
+        isChapterStarGateOpen(chapter.id, levelRecords, extraLevels),
+    }
+  })
+  // Where the player's attention belongs when the list opens: the first
+  // playable chapter they haven't fully starred yet; failing that, a locked
+  // chapter that's ready to be AI-generated (the next actionable thing, even
+  // though it isn't "playable" yet); failing that, their last playable
+  // chapter. undefined if nothing's playable yet (brand-new player) — nothing
+  // to scroll to in that case.
   const currentChapter =
-    rowStats.find((r) => r.playable && r.stars < r.maxStars) ?? [...rowStats].reverse().find((r) => r.playable)
+    rowStats.find((r) => r.playable && r.stars < r.maxStars) ??
+    rowStats.find((r) => r.canGenerate) ??
+    [...rowStats].reverse().find((r) => r.playable)
 
   const rowRefs = useRef(new Map<string, HTMLLIElement>())
   useEffect(() => {
@@ -89,13 +101,9 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
       </div>
       <ul className="chapter-list">
         {rowStats.map((chapter) => {
-          const { playable, stars, maxStars } = chapter
+          const { playable, stars, maxStars, canGenerate } = chapter
           const levelCount = getChapterLevels(chapter.id, extraLevels).length
           const generating = generatingChapterId === chapter.id
-          const canGenerate =
-            levelCount === 0 &&
-            (AI_CHAPTER_IDS as readonly string[]).includes(chapter.id) &&
-            isChapterStarGateOpen(chapter.id, levelRecords, extraLevels)
           return (
             <li
               key={chapter.id}
@@ -117,9 +125,11 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
                   </span>
                 ) : levelCount > 0 ? (
                   <span className="chapter-locked">🔒 需先取得前一章一半星星</span>
-                ) : !canGenerate ? (
+                ) : canGenerate ? (
+                  <span className="chapter-generatable">✨ 可生成</span>
+                ) : (
                   <span className="chapter-locked">🔒 敬請期待</span>
-                ) : null}
+                )}
               </button>
               {canGenerate && (
                 <div className="chapter-generate-row">
