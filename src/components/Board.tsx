@@ -82,7 +82,7 @@ export default function Board() {
         <div className="table-area" ref={tableAreaRef}>
           <div className="columns-row">
             {Array.from({ length: columnCount }, (_, i) => (
-              <Column key={i} columnIndex={i} />
+              <Column key={i} columnIndex={i} maxColumnLen={maxColumnLen} />
             ))}
           </div>
         </div>

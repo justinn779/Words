@@ -4,6 +4,11 @@ import { useGameStore } from '../store/gameStore'
 
 interface ColumnProps {
   columnIndex: number
+  /** The height every column is sized for (Board.tsx's maxColumnLen, from the
+   * initial deal) — collapsing only kicks in once a column's actual card
+   * count grows past this, not unconditionally. A column within its
+   * reserved budget always shows its full, uncollapsed fan. */
+  maxColumnLen: number
 }
 
 interface CardRenderInfo {
@@ -69,11 +74,21 @@ function getCardRenderInfo(column: Card[]): CardRenderInfo[] {
   return info
 }
 
-export default function Column({ columnIndex }: ColumnProps) {
+/** Every card gets its own fan step — no collapsing. Used whenever a column
+ * still fits the height Board.tsx reserved for it. */
+function getNaturalRenderInfo(column: Card[]): CardRenderInfo[] {
+  return column.map((_, i) => ({ offset: i, stackedCount: 0 }))
+}
+
+export default function Column({ columnIndex, maxColumnLen }: ColumnProps) {
   const column = useGameStore((s) => s.game?.columns[columnIndex] ?? [])
   const clickEmptyColumn = useGameStore((s) => s.clickEmptyColumn)
 
-  const renderInfo = getCardRenderInfo(column)
+  // Only collapse once this column has actually grown past the height it was
+  // reserved for (e.g. a player piled a whole category onto it) — a column
+  // still within budget shows every card its own step, same as before this
+  // feature existed.
+  const renderInfo = column.length > maxColumnLen ? getCardRenderInfo(column) : getNaturalRenderInfo(column)
   const fanned = renderInfo.length > 0 ? renderInfo[renderInfo.length - 1].offset : 0
 
   return (
