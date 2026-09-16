@@ -431,12 +431,18 @@ function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntr
     const categoryWordCounts = varyWordCounts(rng, difficulty, categoryIds)
     const base = buildChapterLevelBase(chapterId, difficulty, index, categoryIds, categoryWordCounts)
 
-    // A tighter budget than the offline script's default (8 attempts x 60000
-    // states): this runs inside a live Cloud Function call a player is waiting
-    // on, not an offline batch job, so total latency/cost needs a hard ceiling.
-    // A level that doesn't solve within budget still ships (see unsolvedIds) —
-    // same "log it, don't block" trade-off generateAndVerifyCategories takes.
-    const result = generateSolvableLevel(base, pool, words, { maxAttempts: 5, maxStates: 30000 })
+    // A tight budget: this runs inside a live Cloud Function call with a hard
+    // 300s ceiling shared with the OpenAI calls above, across all 5 levels —
+    // not an offline batch job with minutes to spare. Confirmed necessary in
+    // production: DIFFICULTY_SHAPE's larger category counts (up to 15 for
+    // 'hard') made a plain DFS at the previous budget (5 attempts x 30000
+    // states) take long enough per level that a whole chapter could blow the
+    // timeout entirely, exactly like scripts/generate-levels.ts's old default
+    // budget once did offline (see difficultyShapes.ts's history). A level
+    // that doesn't solve within budget still ships (see unsolvedIds) — same
+    // "log it, don't block" trade-off generateAndVerifyCategories takes; the
+    // player-facing "❗ 回報無解" report flow is the actual safety net now.
+    const result = generateSolvableLevel(base, pool, words, { maxAttempts: 2, maxStates: 5000 })
     const targets = estimateTargets(totalCardCount(categoryWordCounts))
     if (!result.solvable) unsolvedIds.push(result.config.id)
     levels.push({ ...result.config, ...targets })
