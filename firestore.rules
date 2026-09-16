@@ -43,5 +43,12 @@ service cloud.firestore {
     match /levelReportFlags/{levelId} {
       allow read, write: if false;
     }
+
+    // "A player registered" dedup flags (functions/src/index.ts's
+    // notifyUserRegistered) — same Cloud-Functions-only shape as the collections
+    // above; no client ever reads or writes this directly.
+    match /userRegisteredFlags/{uid} {
+      allow read, write: if false;
+    }
   }
 }

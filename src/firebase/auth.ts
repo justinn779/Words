@@ -23,6 +23,24 @@ function describeUser(user: User | null): AuthState {
   return { status: isGoogleLinked ? 'google' : 'anonymous', uid: user.uid, displayName: user.displayName, photoURL: user.photoURL }
 }
 
+/** Fire-and-forget: tells functions/src/index.ts's notifyUserRegistered a player
+ * just linked a persistent account, so the developer gets a Telegram/email ping
+ * (deduped server-side per uid). Never awaited by a caller and never throws —
+ * a notification failing must not block or fail the actual account link. */
+function notifyRegistered(user: User): void {
+  void (async () => {
+    try {
+      const fb = await getFirebase()
+      if (!fb) return
+      const { httpsCallable } = await import('firebase/functions')
+      const call = httpsCallable(fb.functions, 'notifyUserRegistered')
+      await call({ provider: 'google', displayName: user.displayName ?? undefined })
+    } catch (err) {
+      console.error('[firebase] notifyUserRegistered failed', err)
+    }
+  })()
+}
+
 /**
  * Ensures a signed-in user exists (creating an anonymous one on first launch) and
  * calls `onChange` with the current auth state whenever it changes. Returns an
@@ -88,6 +106,7 @@ export async function linkGoogleAccount(): Promise<AuthState> {
   const provider = new GoogleAuthProvider()
   try {
     const result = await linkWithPopup(fb.auth.currentUser, provider)
+    notifyRegistered(result.user)
     return describeUser(result.user)
   } catch (err) {
     const code = (err as { code?: string }).code
@@ -113,6 +132,7 @@ export async function completeGoogleLinkRedirect(): Promise<AuthState | null> {
     return null
   })
   if (!result) return null
+  notifyRegistered(result.user)
   return describeUser(result.user)
 }
 

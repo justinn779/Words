@@ -36,6 +36,48 @@ const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN')
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID')
 const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 
+// --- Developer notifications (Telegram + email) -----------------------------------
+//
+// A handful of events worth knowing about right away rather than digging through
+// logs for: a player flags a level as unsolvable (reportUnsolvableLevel below), AI
+// chapter generation starting/finishing/failing, and a player actually registering
+// (linking a persistent account, not every anonymous first-visit). Any function
+// that calls notifyDeveloper must list TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID/
+// RESEND_API_KEY in its own `secrets` array — v2 only injects a secret into
+// functions that declare it.
+
+const DEVELOPER_NOTIFY_EMAIL = 'justinn779@gmail.com'
+
+async function sendTelegramNotification(token: string, chatId: string, text: string): Promise<void> {
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  })
+  if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text()}`)
+}
+
+async function sendNotificationEmail(apiKey: string, subject: string, text: string): Promise<void> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 'onboarding@resend.dev', to: [DEVELOPER_NOTIFY_EMAIL], subject, text }),
+  })
+  if (!res.ok) throw new Error(`Resend API responded ${res.status}: ${await res.text()}`)
+}
+
+/** Best-effort: sends to both channels, logs (never throws) on either failing —
+ * a notification glitch should never fail the actual operation it's reporting on. */
+async function notifyDeveloper(subject: string, text: string): Promise<void> {
+  const results = await Promise.allSettled([
+    sendTelegramNotification(TELEGRAM_BOT_TOKEN.value(), TELEGRAM_CHAT_ID.value(), text),
+    sendNotificationEmail(RESEND_API_KEY.value(), subject, text),
+  ])
+  for (const result of results) {
+    if (result.status === 'rejected') logger.error('notifyDeveloper: notification failed', { subject, error: String(result.reason) })
+  }
+}
+
 const AI_CATEGORIES_COLLECTION = 'aiCategories'
 const MIN_WORDS = 8
 const CATEGORY_ID_RE = /^[a-z][a-z0-9-]{2,40}$/
@@ -472,91 +514,100 @@ function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntr
 // visited-state-hash Set that grows with every state it explores, and building
 // a full 5-level curve (verifying each with its own solver run) pushed the
 // default over the limit (263MiB used) and crashed the function outright.
-export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
-  }
-  const chapterId = String(request.data?.chapterId ?? '')
-  if (!(AI_CHAPTER_IDS as readonly string[]).includes(chapterId)) {
-    throw new HttpsError('invalid-argument', `Unknown or already-authored chapterId "${chapterId}"`)
-  }
-
-  const db = getFirestore()
-  const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
-  const existingSnap = await chapterRef.get()
-  if (existingSnap.exists) {
-    const data = existingSnap.data() as { status?: string; levels?: LevelConfig[]; startedAt?: FirebaseFirestore.Timestamp }
-    if (data.status === 'ready' && data.levels) {
-      logger.info('generateNextChapterNow reused existing chapter', { chapterId, uid: request.auth.uid })
-      return { chapterId, levels: data.levels, reused: true }
+export const generateNextChapterNow = onCall(
+  { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY], timeoutSeconds: 300, memory: '1GiB' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
     }
-    if (data.status === 'generating' && Date.now() - (data.startedAt?.toMillis() ?? 0) < GENERATING_LOCK_TIMEOUT_MS) {
-      throw new HttpsError('already-exists', 'This chapter is already being generated — try again shortly.')
+    const chapterId = String(request.data?.chapterId ?? '')
+    if (!(AI_CHAPTER_IDS as readonly string[]).includes(chapterId)) {
+      throw new HttpsError('invalid-argument', `Unknown or already-authored chapterId "${chapterId}"`)
     }
-  }
 
-  await chapterRef.set({ status: 'generating', startedAt: FieldValue.serverTimestamp() })
+    const db = getFirestore()
+    const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
+    const existingSnap = await chapterRef.get()
+    if (existingSnap.exists) {
+      const data = existingSnap.data() as { status?: string; levels?: LevelConfig[]; startedAt?: FirebaseFirestore.Timestamp }
+      if (data.status === 'ready' && data.levels) {
+        logger.info('generateNextChapterNow reused existing chapter', { chapterId, uid: request.auth.uid })
+        return { chapterId, levels: data.levels, reused: true }
+      }
+      if (data.status === 'generating' && Date.now() - (data.startedAt?.toMillis() ?? 0) < GENERATING_LOCK_TIMEOUT_MS) {
+        throw new HttpsError('already-exists', 'This chapter is already being generated — try again shortly.')
+      }
+    }
 
-  try {
-    const existingIds = await existingCategoryIds()
-    const existingWordSet = await existingWords()
-    let accepted: VerifiedCategory[] = []
-    let rejected: { categoryId: string; reason: string }[] = []
+    await chapterRef.set({ status: 'generating', startedAt: FieldValue.serverTimestamp() })
+    await notifyDeveloper('文字接龍：開始生成章節', `[文字接龍] 開始生成章節\n章節：${chapterId}`)
+
     try {
-      // No theme hint — see the comment above AI_CHAPTER_IDS for why. A wide-
-      // open ask (same shape as dailyAiCategoryRefresh's top-up) has far more
-      // room to avoid colliding with the existing pool than a narrow topic did.
-      const topUp = await generateCategoriesWithTopUp(
-        (excludedIds, count) => generateCategories(OPENAI_API_KEY.value(), excludedIds, count),
-        existingIds,
-        existingWordSet,
+      const existingIds = await existingCategoryIds()
+      const existingWordSet = await existingWords()
+      let accepted: VerifiedCategory[] = []
+      let rejected: { categoryId: string; reason: string }[] = []
+      try {
+        // No theme hint — see the comment above AI_CHAPTER_IDS for why. A wide-
+        // open ask (same shape as dailyAiCategoryRefresh's top-up) has far more
+        // room to avoid colliding with the existing pool than a narrow topic did.
+        const topUp = await generateCategoriesWithTopUp(
+          (excludedIds, count) => generateCategories(OPENAI_API_KEY.value(), excludedIds, count),
+          existingIds,
+          existingWordSet,
+          DIFFICULTY_SHAPE.hard.categoryCount,
+          CHAPTER_CATEGORY_POOL_TARGET,
+        )
+        const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), topUp.accepted)
+        accepted = review.kept
+        rejected = [...topUp.rejected, ...review.rejected]
+      } catch (err) {
+        // OpenAI itself unreachable/malformed — not fatal, fillShortfallFromExistingPool
+        // below fills the entire chapter from the existing pool instead.
+        logger.warn('generateNextChapterNow: AI category generation failed, falling back to existing pool', {
+          chapterId,
+          error: String(err),
+        })
+      }
+      logger.info('generateNextChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
+
+      await persistAcceptedCategories(accepted)
+
+      const filled = await fillShortfallFromExistingPool(
+        accepted,
+        new Set(accepted.map((c) => c.categoryId)),
         DIFFICULTY_SHAPE.hard.categoryCount,
-        CHAPTER_CATEGORY_POOL_TARGET,
       )
-      const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), topUp.accepted)
-      accepted = review.kept
-      rejected = [...topUp.rejected, ...review.rejected]
+      if (filled.length > accepted.length) {
+        logger.info('generateNextChapterNow topped up shortfall from existing pool', {
+          chapterId,
+          newlyGenerated: accepted.length,
+          filledFromPool: filled.length - accepted.length,
+        })
+      }
+
+      const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
+      const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
+      const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
+      if (unsolvedIds.length > 0) {
+        logger.warn('generateNextChapterNow: some levels unverified', { chapterId, unsolvedIds })
+      }
+
+      await chapterRef.set({ status: 'ready', levels, readyAt: FieldValue.serverTimestamp() })
+      logger.info('generateNextChapterNow done', { chapterId, uid: request.auth.uid, levelCount: levels.length })
+      await notifyDeveloper(
+        '文字接龍：章節生成成功',
+        `[文字接龍] 章節生成成功\n章節：${chapterId}\n關卡數：${levels.length}\n未驗證關卡數：${unsolvedIds.length}`,
+      )
+      return { chapterId, levels, reused: false }
     } catch (err) {
-      // OpenAI itself unreachable/malformed — not fatal, fillShortfallFromExistingPool
-      // below fills the entire chapter from the existing pool instead.
-      logger.warn('generateNextChapterNow: AI category generation failed, falling back to existing pool', {
-        chapterId,
-        error: String(err),
-      })
+      await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() })
+      logger.error('generateNextChapterNow failed', { chapterId, error: String(err) })
+      await notifyDeveloper('文字接龍：章節生成失敗', `[文字接龍] 章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
+      throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
     }
-    logger.info('generateNextChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
-
-    await persistAcceptedCategories(accepted)
-
-    const filled = await fillShortfallFromExistingPool(
-      accepted,
-      new Set(accepted.map((c) => c.categoryId)),
-      DIFFICULTY_SHAPE.hard.categoryCount,
-    )
-    if (filled.length > accepted.length) {
-      logger.info('generateNextChapterNow topped up shortfall from existing pool', {
-        chapterId,
-        newlyGenerated: accepted.length,
-        filledFromPool: filled.length - accepted.length,
-      })
-    }
-
-    const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
-    const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
-    const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
-    if (unsolvedIds.length > 0) {
-      logger.warn('generateNextChapterNow: some levels unverified', { chapterId, unsolvedIds })
-    }
-
-    await chapterRef.set({ status: 'ready', levels, readyAt: FieldValue.serverTimestamp() })
-    logger.info('generateNextChapterNow done', { chapterId, uid: request.auth.uid, levelCount: levels.length })
-    return { chapterId, levels, reused: false }
-  } catch (err) {
-    await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() })
-    logger.error('generateNextChapterNow failed', { chapterId, error: String(err) })
-    throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
-  }
-})
+  },
+)
 
 // --- Open-ended chapter generation (beyond the 8 in src/data/chapters.ts) -------
 //
@@ -585,131 +636,140 @@ async function existingChapterTitles(): Promise<string[]> {
   return [...CHAPTERS.map((c) => c.title), ...dynamicTitles]
 }
 
-export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeoutSeconds: 300, memory: '1GiB' }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
-  }
+export const generateNewChapterNow = onCall(
+  { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY], timeoutSeconds: 300, memory: '1GiB' },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
+    }
 
-  const db = getFirestore()
-  // Atomically reserve the next order number so two players finishing the last
-  // chapter at nearly the same moment don't generate two competing chapters.
-  const order = await db.runTransaction(async (tx) => {
-    const counterRef = db.doc(CHAPTER_COUNTER_DOC)
-    const snap = await tx.get(counterRef)
-    const next = snap.exists ? (snap.data()!.nextOrder as number) : FIRST_DYNAMIC_CHAPTER_ORDER
-    tx.set(counterRef, { nextOrder: next + 1 }, { merge: true })
-    return next
-  })
-  const chapterId = `ai-chapter-${order}`
-  const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
+    const db = getFirestore()
+    // Atomically reserve the next order number so two players finishing the last
+    // chapter at nearly the same moment don't generate two competing chapters.
+    const order = await db.runTransaction(async (tx) => {
+      const counterRef = db.doc(CHAPTER_COUNTER_DOC)
+      const snap = await tx.get(counterRef)
+      const next = snap.exists ? (snap.data()!.nextOrder as number) : FIRST_DYNAMIC_CHAPTER_ORDER
+      tx.set(counterRef, { nextOrder: next + 1 }, { merge: true })
+      return next
+    })
+    const chapterId = `ai-chapter-${order}`
+    const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
 
-  await chapterRef.set({ status: 'generating', order, startedAt: FieldValue.serverTimestamp() })
+    await chapterRef.set({ status: 'generating', order, startedAt: FieldValue.serverTimestamp() })
+    await notifyDeveloper('文字接龍：開始生成全新章節', `[文字接龍] 開始生成全新章節\n預計序號：${order}`)
 
-  try {
-    const existingIds = await existingCategoryIds()
-    const existingWordSet = await existingWords()
-
-    // A brand-new chapter's title only makes sense if OpenAI actually invents
-    // one — but everything downstream of it (the categories) still has the same
-    // guarantee as generateNextChapterNow: any failure anywhere in this
-    // AI-dependent chain (theme invention, top-up rounds, review) is not fatal —
-    // it just leaves chapterTitle unset and accepted empty, and
-    // fillShortfallFromExistingPool below fills the whole chapter from the
-    // existing pool. getChapterDisplayTitle (src/data/progression.ts) already
-    // renders a chapter with no AI title as a plain "第N章", so this degrades
-    // gracefully rather than leaving the chapter stuck.
-    let chapterTitle: string | undefined
-    let accepted: VerifiedCategory[] = []
-    let rejected: { categoryId: string; reason: string }[] = []
     try {
-      const existingTitles = await existingChapterTitles()
-      const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
-      chapterTitle = seed.chapterTitle
-      logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
+      const existingIds = await existingCategoryIds()
+      const existingWordSet = await existingWords()
 
-      const excludedIds = new Set(existingIds)
-      const excludedWords = new Set(existingWordSet)
-      const initial = verifyCategoryCandidatesFrom(seed.categories, [...excludedIds], excludedWords)
-      accepted = initial.accepted
-      rejected = initial.rejected
-      for (const cat of accepted) {
-        excludedIds.add(cat.categoryId)
-        for (const w of cat.words) excludedWords.add(w)
-      }
+      // A brand-new chapter's title only makes sense if OpenAI actually invents
+      // one — but everything downstream of it (the categories) still has the same
+      // guarantee as generateNextChapterNow: any failure anywhere in this
+      // AI-dependent chain (theme invention, top-up rounds, review) is not fatal —
+      // it just leaves chapterTitle unset and accepted empty, and
+      // fillShortfallFromExistingPool below fills the whole chapter from the
+      // existing pool. getChapterDisplayTitle (src/data/progression.ts) already
+      // renders a chapter with no AI title as a plain "第N章", so this degrades
+      // gracefully rather than leaving the chapter stuck.
+      let chapterTitle: string | undefined
+      let accepted: VerifiedCategory[] = []
+      let rejected: { categoryId: string; reason: string }[] = []
+      try {
+        const existingTitles = await existingChapterTitles()
+        const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
+        chapterTitle = seed.chapterTitle
+        logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
 
-      // The theme is only invented once (above) — these top-up rounds ask for
-      // more categories under that SAME theme, they don't re-invent a new one.
-      for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
-        const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
-        const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, chapterTitle)
-        const verified = verifyCategoryCandidatesFrom(more, [...excludedIds], excludedWords)
-        for (const cat of verified.accepted) {
+        const excludedIds = new Set(existingIds)
+        const excludedWords = new Set(existingWordSet)
+        const initial = verifyCategoryCandidatesFrom(seed.categories, [...excludedIds], excludedWords)
+        accepted = initial.accepted
+        rejected = initial.rejected
+        for (const cat of accepted) {
           excludedIds.add(cat.categoryId)
           for (const w of cat.words) excludedWords.add(w)
         }
-        accepted = [...accepted, ...verified.accepted]
-        rejected = [...rejected, ...verified.rejected]
+
+        // The theme is only invented once (above) — these top-up rounds ask for
+        // more categories under that SAME theme, they don't re-invent a new one.
+        for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
+          const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
+          const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, chapterTitle)
+          const verified = verifyCategoryCandidatesFrom(more, [...excludedIds], excludedWords)
+          for (const cat of verified.accepted) {
+            excludedIds.add(cat.categoryId)
+            for (const w of cat.words) excludedWords.add(w)
+          }
+          accepted = [...accepted, ...verified.accepted]
+          rejected = [...rejected, ...verified.rejected]
+        }
+
+        const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), accepted)
+        accepted = review.kept
+        rejected = [...rejected, ...review.rejected]
+      } catch (err) {
+        logger.warn('generateNewChapterNow: AI theme/category generation failed, falling back to the existing pool with a generic title', {
+          chapterId,
+          order,
+          error: String(err),
+        })
+        chapterTitle = undefined
+        accepted = []
+        rejected = []
+      }
+      logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
+
+      await persistAcceptedCategories(accepted)
+
+      // Same guarantee as generateNextChapterNow — if this new theme didn't yield
+      // enough verified categories of its own, top up from the existing pool
+      // rather than leaving the chapter stuck. The chapter still gets its own
+      // freshly-invented title even when some of its categories end up being
+      // familiar ones.
+      const filled = await fillShortfallFromExistingPool(
+        accepted,
+        new Set(accepted.map((c) => c.categoryId)),
+        DIFFICULTY_SHAPE.hard.categoryCount,
+      )
+      if (filled.length > accepted.length) {
+        logger.info('generateNewChapterNow topped up shortfall from existing pool', {
+          chapterId,
+          newlyGenerated: accepted.length,
+          filledFromPool: filled.length - accepted.length,
+        })
       }
 
-      const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), accepted)
-      accepted = review.kept
-      rejected = [...rejected, ...review.rejected]
-    } catch (err) {
-      logger.warn('generateNewChapterNow: AI theme/category generation failed, falling back to the existing pool with a generic title', {
-        chapterId,
+      const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
+      const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
+      const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
+      if (unsolvedIds.length > 0) {
+        logger.warn('generateNewChapterNow: some levels unverified', { chapterId, unsolvedIds })
+      }
+
+      // Firestore rejects an explicit `undefined` field value outright — omit
+      // `title` entirely on the no-AI-theme fallback path rather than write one.
+      await chapterRef.set({
+        status: 'ready',
+        ...(chapterTitle ? { title: chapterTitle } : {}),
         order,
-        error: String(err),
+        levels,
+        readyAt: FieldValue.serverTimestamp(),
       })
-      chapterTitle = undefined
-      accepted = []
-      rejected = []
+      logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
+      await notifyDeveloper(
+        '文字接龍：全新章節生成成功',
+        `[文字接龍] 全新章節生成成功\n章節：${chapterId}\n標題：${chapterTitle ?? '（無，使用預設章節標題）'}\n關卡數：${levels.length}\n未驗證關卡數：${unsolvedIds.length}`,
+      )
+      return { chapterId, title: chapterTitle, order, levels }
+    } catch (err) {
+      await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() }, { merge: true })
+      logger.error('generateNewChapterNow failed', { chapterId, error: String(err) })
+      await notifyDeveloper('文字接龍：全新章節生成失敗', `[文字接龍] 全新章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
+      throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
     }
-    logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
-
-    await persistAcceptedCategories(accepted)
-
-    // Same guarantee as generateNextChapterNow — if this new theme didn't yield
-    // enough verified categories of its own, top up from the existing pool
-    // rather than leaving the chapter stuck. The chapter still gets its own
-    // freshly-invented title even when some of its categories end up being
-    // familiar ones.
-    const filled = await fillShortfallFromExistingPool(
-      accepted,
-      new Set(accepted.map((c) => c.categoryId)),
-      DIFFICULTY_SHAPE.hard.categoryCount,
-    )
-    if (filled.length > accepted.length) {
-      logger.info('generateNewChapterNow topped up shortfall from existing pool', {
-        chapterId,
-        newlyGenerated: accepted.length,
-        filledFromPool: filled.length - accepted.length,
-      })
-    }
-
-    const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
-    const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
-    const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
-    if (unsolvedIds.length > 0) {
-      logger.warn('generateNewChapterNow: some levels unverified', { chapterId, unsolvedIds })
-    }
-
-    // Firestore rejects an explicit `undefined` field value outright — omit
-    // `title` entirely on the no-AI-theme fallback path rather than write one.
-    await chapterRef.set({
-      status: 'ready',
-      ...(chapterTitle ? { title: chapterTitle } : {}),
-      order,
-      levels,
-      readyAt: FieldValue.serverTimestamp(),
-    })
-    logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
-    return { chapterId, title: chapterTitle, order, levels }
-  } catch (err) {
-    await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() }, { merge: true })
-    logger.error('generateNewChapterNow failed', { chapterId, error: String(err) })
-    throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
-  }
-})
+  },
+)
 
 // --- "Report an unsolvable level" ------------------------------------------------
 //
@@ -723,27 +783,8 @@ export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeout
 // a low-friction way for a player who actually gets stuck to flag the specific
 // level, so it can be fixed by hand instead.
 
-const REPORT_NOTIFY_EMAIL = 'justinn779@gmail.com'
 const LEVEL_REPORT_FLAGS_COLLECTION = 'levelReportFlags'
 const REPORT_ID_RE = /^[a-zA-Z0-9-]{1,80}$/
-
-async function sendTelegramNotification(token: string, chatId: string, text: string): Promise<void> {
-  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text }),
-  })
-  if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text()}`)
-}
-
-async function sendReportEmail(apiKey: string, subject: string, text: string): Promise<void> {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: 'onboarding@resend.dev', to: [REPORT_NOTIFY_EMAIL], subject, text }),
-  })
-  if (!res.ok) throw new Error(`Resend API responded ${res.status}: ${await res.text()}`)
-}
 
 /** Player-facing callable (see src/firebase/reports.ts and HUD.tsx's "❗ 回報無解"
  * button): records that `levelId` was flagged as possibly unsolvable, and — only
@@ -789,16 +830,47 @@ export const reportUnsolvableLevel = onCall(
 
     if (shouldNotify) {
       const text = `[文字接龍] 玩家回報可能無解的關卡\n章節：${chapterId}\n關卡：${levelId}\n難度：${difficulty}`
-      const results = await Promise.allSettled([
-        sendTelegramNotification(TELEGRAM_BOT_TOKEN.value(), TELEGRAM_CHAT_ID.value(), text),
-        sendReportEmail(RESEND_API_KEY.value(), '文字接龍：有關卡被回報無解', text),
-      ])
-      for (const result of results) {
-        if (result.status === 'rejected') logger.error('reportUnsolvableLevel: notification failed', { error: String(result.reason) })
-      }
+      await notifyDeveloper('文字接龍：有關卡被回報無解', text)
     }
 
     logger.info('reportUnsolvableLevel recorded', { levelId, chapterId, difficulty, uid: request.auth.uid, notified: shouldNotify })
     return { ok: true }
   },
 )
+
+// --- "A player registered" notification ------------------------------------------
+//
+// Anonymous sign-in happens automatically for every first-time visitor (see
+// src/firebase/auth.ts's initAuth) — far too frequent to notify on and not a
+// meaningful event on its own. What's actually worth knowing about is a player
+// choosing to link a persistent account (currently Google — see linkGoogleAccount),
+// which the client calls this after. Deduped per uid (a page reload or a retry
+// after an already-successful link never double-notifies).
+
+const USER_REGISTERED_FLAGS_COLLECTION = 'userRegisteredFlags'
+
+export const notifyUserRegistered = onCall({ secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Sign in before registering.')
+  }
+  const uid = request.auth.uid
+  const displayName = typeof request.data?.displayName === 'string' ? request.data.displayName.slice(0, 100) : undefined
+  const provider = typeof request.data?.provider === 'string' ? request.data.provider.slice(0, 40) : 'unknown'
+
+  const db = getFirestore()
+  const flagRef = db.collection(USER_REGISTERED_FLAGS_COLLECTION).doc(uid)
+  const alreadyNotified = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(flagRef)
+    if (snap.exists) return true
+    tx.set(flagRef, { provider, displayName: displayName ?? null, registeredAt: FieldValue.serverTimestamp() })
+    return false
+  })
+
+  if (!alreadyNotified) {
+    const text = `[文字接龍] 有新玩家註冊\n方式：${provider}\n名稱：${displayName ?? '（無）'}\nUID：${uid}`
+    await notifyDeveloper('文字接龍：有新玩家註冊', text)
+  }
+
+  logger.info('notifyUserRegistered recorded', { uid, provider, notified: !alreadyNotified })
+  return { ok: true }
+})
