@@ -416,13 +416,22 @@ function buildChapterLevelBase(
   }
 }
 
-/** Mirrors scripts/generate-levels.ts's generateChapter, but over a freshly
- * AI-generated category pool instead of the static built-in CATEGORIES/WORDS. */
-function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntry[]): { levels: LevelConfig[]; unsolvedIds: string[] } {
+/** Mirrors scripts/generate-levels.ts's old generateChapter, but over a freshly
+ * AI-generated category pool instead of the static built-in CATEGORIES/WORDS.
+ *
+ * No solver verification here anymore, on purpose: a level's stored config now
+ * only fixes its card *pool* (categoryIds/categoryWordCounts) — the actual deal
+ * (which cards land in the deck vs. which column, in what order) is randomized
+ * fresh every time a player enters or replays it (see src/engine/deal.ts's
+ * dealUntilLikelyWinnable, the client's `seed` override). Pre-verifying one
+ * specific seed at generation time was both expensive (this is exactly what
+ * made chapter generation risk the 300s Cloud Function timeout) and pointless
+ * under that model, since the stored seed is never actually used to deal a
+ * board — see difficultyShapes.ts's history for the timeout story this replaces. */
+function buildChapterLevels(chapterId: string, pool: Category[]): { levels: LevelConfig[] } {
   const rng = createRng(`chapter-levels-${chapterId}`)
   const poolIds = pool.map((c) => c.id)
   const levels: LevelConfig[] = []
-  const unsolvedIds: string[] = []
 
   CHAPTER_LEVEL_CURVE.forEach((difficulty, index) => {
     const shape = DIFFICULTY_SHAPE[difficulty]
@@ -430,29 +439,11 @@ function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntr
     const categoryIds = shuffle(poolIds, rng).slice(0, categoryCount)
     const categoryWordCounts = varyWordCounts(rng, difficulty, categoryIds)
     const base = buildChapterLevelBase(chapterId, difficulty, index, categoryIds, categoryWordCounts)
-
-    // A tight budget: this runs inside a live Cloud Function call with a hard
-    // 300s ceiling shared with the OpenAI calls above, across all 5 levels —
-    // not an offline batch job with minutes to spare. Confirmed necessary in
-    // production: DIFFICULTY_SHAPE's larger category counts (up to 15 for
-    // 'hard') made a plain DFS at the previous budget (5 attempts x 30000
-    // states) take long enough per level that a whole chapter could blow the
-    // timeout entirely, exactly like scripts/generate-levels.ts's old default
-    // budget once did offline (see difficultyShapes.ts's history). Dropping all
-    // the way to 2x5000 fixed the timeout but solved ~0% of levels — this is a
-    // middle ground with real headroom against the 300s ceiling (~1 minute used
-    // per chapter in testing) while still finding real solutions meaningfully
-    // more often. A level that doesn't solve within budget still ships (see
-    // unsolvedIds) — same "log it, don't block" trade-off
-    // generateAndVerifyCategories takes; the player-facing "❗ 回報無解" report
-    // flow is the actual safety net now.
-    const result = generateSolvableLevel(base, pool, words, { maxAttempts: 3, maxStates: 15000 })
     const targets = estimateTargets(totalCardCount(categoryWordCounts))
-    if (!result.solvable) unsolvedIds.push(result.config.id)
-    levels.push({ ...result.config, ...targets })
+    levels.push({ ...base, ...targets, seed: `${base.id}-s0` })
   })
 
-  return { levels, unsolvedIds }
+  return { levels }
 }
 
 // generateNewChapterNow reserves the next sequential chapter "order" via a
@@ -579,11 +570,7 @@ export const generateNewChapterNow = onCall(
       }
 
       const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
-      const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
-      const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
-      if (unsolvedIds.length > 0) {
-        logger.warn('generateNewChapterNow: some levels unverified', { chapterId, unsolvedIds })
-      }
+      const { levels } = buildChapterLevels(chapterId, pool)
 
       // Firestore rejects an explicit `undefined` field value outright — omit
       // `title` entirely on the no-AI-theme fallback path rather than write one.
@@ -596,7 +583,7 @@ export const generateNewChapterNow = onCall(
       })
       logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
       await notifyDeveloper(
-        `[文字接龍] 全新章節生成成功\n章節：${chapterId}\n標題：${chapterTitle ?? '（無，使用預設章節標題）'}\n關卡數：${levels.length}\n未驗證關卡數：${unsolvedIds.length}`,
+        `[文字接龍] 全新章節生成成功\n章節：${chapterId}\n標題：${chapterTitle ?? '（無，使用預設章節標題）'}\n關卡數：${levels.length}`,
       )
       return { chapterId, title: chapterTitle, order, levels }
     } catch (err) {

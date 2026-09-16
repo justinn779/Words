@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { GameState, HintResult, LevelConfig, Location, ScoreResult } from '../engine/types'
 import {
   createGame,
+  dealUntilLikelyWinnable,
   moveCard,
   moveStack,
   canMoveStack,
@@ -182,7 +183,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
   startLevel: (levelId) => {
     const levelConfig = findLevel(levelId)
-    const game = createGame(levelConfig, allCategories(), allWords())
+    // Never the same layout twice, even replaying the same level — see
+    // src/engine/deal.ts. Daily Challenge (below) is the one exception: it
+    // keeps calling createGame directly with its fixed shared-seed config, since
+    // every player must see the same board on the same day.
+    const game = dealUntilLikelyWinnable(levelConfig, allCategories(), allWords())
     set({
       levelConfig,
       game,

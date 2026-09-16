@@ -63,4 +63,26 @@ describe('createGame', () => {
     const b = createGame({ ...baseConfig, seed: 'another-seed' }, CATEGORIES, WORDS)
     expect(a.columns.map((c) => c.map((x) => x.id))).not.toEqual(b.columns.map((c) => c.map((x) => x.id)))
   })
+
+  it('deals columns in decreasing size left to right, not an even/round-robin split', () => {
+    // 10 board cards over 4 columns -> 4,3,2,1 (exact arithmetic fit).
+    const state = createGame(baseConfig, CATEGORIES, WORDS)
+    expect(state.columns.map((c) => c.length)).toEqual([4, 3, 2, 1])
+  })
+
+  it('decreasing columns still sum to the full board when deckEnabled shrinks it', () => {
+    // 3 categories * (7 words + 1 category card) = 24 total; deck takes 9,
+    // leaving 15 board cards over 3 columns -> 6,5,4.
+    const config: LevelConfig = {
+      ...baseConfig,
+      categoryIds: ['fruit', 'animal', 'instrument'],
+      categoryWordCounts: { fruit: 7, animal: 7, instrument: 7 },
+      columnCount: 3,
+      deckEnabled: true,
+      deckSize: 9,
+    }
+    const state = createGame(config, CATEGORIES, WORDS)
+    expect(state.columns.map((c) => c.length)).toEqual([6, 5, 4])
+    expect(state.deck).toHaveLength(9)
+  })
 })
