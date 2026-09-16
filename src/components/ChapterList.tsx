@@ -24,7 +24,6 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
   const levelRecords = usePlayerStore((s) => s.levelRecords)
   const aiChapters = useContentStore((s) => s.aiChapters)
   const generatingChapterId = useContentStore((s) => s.generatingChapterId)
-  const generateChapter = useContentStore((s) => s.generateChapter)
   const generateNewChapter = useContentStore((s) => s.generateNewChapter)
   const extraLevels = Object.values(aiChapters).flatMap((e) => e.levels)
   const contentOrder = getContentChapterOrder(extraLevels)
@@ -60,10 +59,11 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
   })
   // Where the player's attention belongs when the list opens: the first
   // playable chapter they haven't fully starred yet; failing that, a locked
-  // chapter that's ready to be AI-generated (the next actionable thing, even
-  // though it isn't "playable" yet); failing that, their last playable
-  // chapter. undefined if nothing's playable yet (brand-new player) — nothing
-  // to scroll to in that case.
+  // chapter that's about to auto-generate (see gameStore.ts's startLevel ->
+  // ensureNextChapterGenerating — no player action needed, just the most
+  // relevant row to see); failing that, their last playable chapter.
+  // undefined if nothing's playable yet (brand-new player) — nothing to
+  // scroll to in that case.
   const currentChapter =
     rowStats.find((r) => r.playable && r.stars < r.maxStars) ??
     rowStats.find((r) => r.canGenerate) ??
@@ -78,12 +78,6 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
     // back on an unrelated re-render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentChapter?.id])
-
-  const handleGenerate = async (chapterId: string) => {
-    setGenError(null)
-    const result = await generateChapter(chapterId)
-    if (!result.ok) setGenError({ chapterId, message: result.message })
-  }
 
   const handleGenerateNew = async () => {
     setGenError(null)
@@ -125,25 +119,14 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
                   </span>
                 ) : levelCount > 0 ? (
                   <span className="chapter-locked">🔒 需先取得前一章一半星星</span>
+                ) : generating ? (
+                  <span className="chapter-generatable">🪄 生成中…</span>
                 ) : canGenerate ? (
-                  <span className="chapter-generatable">✨ 可生成</span>
+                  <span className="chapter-generatable">✨ 即將自動生成</span>
                 ) : (
                   <span className="chapter-locked">🔒 敬請期待</span>
                 )}
               </button>
-              {canGenerate && (
-                <div className="chapter-generate-row">
-                  <button
-                    type="button"
-                    className="settings-toggle"
-                    disabled={generating}
-                    onClick={() => handleGenerate(chapter.id)}
-                  >
-                    {generating ? '生成中…' : '🪄 用 AI 生成本章'}
-                  </button>
-                  {genError?.chapterId === chapter.id && <span className="settings-error">{genError.message}</span>}
-                </div>
-              )}
             </li>
           )
         })}

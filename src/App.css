@@ -225,11 +225,10 @@
 }
 
 /* A chapter with nothing playable yet but whose star-gate is already open —
-   unlike .chapter-locked (nothing to do here yet), this row's disabled button
-   still leads straight to the "🪄 用 AI 生成本章" row right under it, so it
-   reads as "ready", not "locked". Without this the row's right side was
-   simply blank — inconsistent next to every sibling row always showing
-   something there (stars or a lock reason). */
+   it auto-generates on its own (gameStore.ts's ensureNextChapterGenerating)
+   the moment the player starts a level in the current frontier chapter, no
+   button needed here. Distinct styling from .chapter-locked (truly nothing
+   to do yet) so this reads as "on its way", not "locked" or blank. */
 .chapter-generatable {
   color: var(--accent);
   font-weight: 600;
