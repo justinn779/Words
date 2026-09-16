@@ -34,19 +34,15 @@ initializeApp()
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
 const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN')
 const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID')
-const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 
-// --- Developer notifications (Telegram + email) -----------------------------------
+// --- Developer notifications (Telegram) -------------------------------------------
 //
 // A handful of events worth knowing about right away rather than digging through
 // logs for: a player flags a level as unsolvable (reportUnsolvableLevel below), AI
 // chapter generation starting/finishing/failing, and a player actually registering
 // (linking a persistent account, not every anonymous first-visit). Any function
-// that calls notifyDeveloper must list TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID/
-// RESEND_API_KEY in its own `secrets` array — v2 only injects a secret into
-// functions that declare it.
-
-const DEVELOPER_NOTIFY_EMAIL = 'justinn779@gmail.com'
+// that calls notifyDeveloper must list TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID in its
+// own `secrets` array — v2 only injects a secret into functions that declare it.
 
 async function sendTelegramNotification(token: string, chatId: string, text: string): Promise<void> {
   const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
@@ -57,24 +53,13 @@ async function sendTelegramNotification(token: string, chatId: string, text: str
   if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text()}`)
 }
 
-async function sendNotificationEmail(apiKey: string, subject: string, text: string): Promise<void> {
-  const res = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ from: 'onboarding@resend.dev', to: [DEVELOPER_NOTIFY_EMAIL], subject, text }),
-  })
-  if (!res.ok) throw new Error(`Resend API responded ${res.status}: ${await res.text()}`)
-}
-
-/** Best-effort: sends to both channels, logs (never throws) on either failing —
- * a notification glitch should never fail the actual operation it's reporting on. */
-async function notifyDeveloper(subject: string, text: string): Promise<void> {
-  const results = await Promise.allSettled([
-    sendTelegramNotification(TELEGRAM_BOT_TOKEN.value(), TELEGRAM_CHAT_ID.value(), text),
-    sendNotificationEmail(RESEND_API_KEY.value(), subject, text),
-  ])
-  for (const result of results) {
-    if (result.status === 'rejected') logger.error('notifyDeveloper: notification failed', { subject, error: String(result.reason) })
+/** Best-effort: never throws — a notification glitch must never fail the actual
+ * operation it's reporting on. */
+async function notifyDeveloper(text: string): Promise<void> {
+  try {
+    await sendTelegramNotification(TELEGRAM_BOT_TOKEN.value(), TELEGRAM_CHAT_ID.value(), text)
+  } catch (err) {
+    logger.error('notifyDeveloper: Telegram notification failed', { error: String(err) })
   }
 }
 
@@ -515,7 +500,7 @@ function buildChapterLevels(chapterId: string, pool: Category[], words: WordEntr
 // a full 5-level curve (verifying each with its own solver run) pushed the
 // default over the limit (263MiB used) and crashed the function outright.
 export const generateNextChapterNow = onCall(
-  { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY], timeoutSeconds: 300, memory: '1GiB' },
+  { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID], timeoutSeconds: 300, memory: '1GiB' },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
@@ -540,7 +525,7 @@ export const generateNextChapterNow = onCall(
     }
 
     await chapterRef.set({ status: 'generating', startedAt: FieldValue.serverTimestamp() })
-    await notifyDeveloper('文字接龍：開始生成章節', `[文字接龍] 開始生成章節\n章節：${chapterId}`)
+    await notifyDeveloper(`[文字接龍] 開始生成章節\n章節：${chapterId}`)
 
     try {
       const existingIds = await existingCategoryIds()
@@ -595,15 +580,12 @@ export const generateNextChapterNow = onCall(
 
       await chapterRef.set({ status: 'ready', levels, readyAt: FieldValue.serverTimestamp() })
       logger.info('generateNextChapterNow done', { chapterId, uid: request.auth.uid, levelCount: levels.length })
-      await notifyDeveloper(
-        '文字接龍：章節生成成功',
-        `[文字接龍] 章節生成成功\n章節：${chapterId}\n關卡數：${levels.length}\n未驗證關卡數：${unsolvedIds.length}`,
-      )
+      await notifyDeveloper(`[文字接龍] 章節生成成功\n章節：${chapterId}\n關卡數：${levels.length}\n未驗證關卡數：${unsolvedIds.length}`)
       return { chapterId, levels, reused: false }
     } catch (err) {
       await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() })
       logger.error('generateNextChapterNow failed', { chapterId, error: String(err) })
-      await notifyDeveloper('文字接龍：章節生成失敗', `[文字接龍] 章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
+      await notifyDeveloper(`[文字接龍] 章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
       throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
     }
   },
@@ -637,7 +619,7 @@ async function existingChapterTitles(): Promise<string[]> {
 }
 
 export const generateNewChapterNow = onCall(
-  { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY], timeoutSeconds: 300, memory: '1GiB' },
+  { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID], timeoutSeconds: 300, memory: '1GiB' },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
@@ -657,7 +639,7 @@ export const generateNewChapterNow = onCall(
     const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
 
     await chapterRef.set({ status: 'generating', order, startedAt: FieldValue.serverTimestamp() })
-    await notifyDeveloper('文字接龍：開始生成全新章節', `[文字接龍] 開始生成全新章節\n預計序號：${order}`)
+    await notifyDeveloper(`[文字接龍] 開始生成全新章節\n預計序號：${order}`)
 
     try {
       const existingIds = await existingCategoryIds()
@@ -758,14 +740,13 @@ export const generateNewChapterNow = onCall(
       })
       logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
       await notifyDeveloper(
-        '文字接龍：全新章節生成成功',
         `[文字接龍] 全新章節生成成功\n章節：${chapterId}\n標題：${chapterTitle ?? '（無，使用預設章節標題）'}\n關卡數：${levels.length}\n未驗證關卡數：${unsolvedIds.length}`,
       )
       return { chapterId, title: chapterTitle, order, levels }
     } catch (err) {
       await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() }, { merge: true })
       logger.error('generateNewChapterNow failed', { chapterId, error: String(err) })
-      await notifyDeveloper('文字接龍：全新章節生成失敗', `[文字接龍] 全新章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
+      await notifyDeveloper(`[文字接龍] 全新章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
       throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
     }
   },
@@ -795,7 +776,7 @@ const REPORT_ID_RE = /^[a-zA-Z0-9-]{1,80}$/
  * fixed and re-verified, the fix workflow deletes/resolves this flag doc so a
  * future regression can notify again. */
 export const reportUnsolvableLevel = onCall(
-  { secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY] },
+  { secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID] },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before reporting a level.')
@@ -830,7 +811,7 @@ export const reportUnsolvableLevel = onCall(
 
     if (shouldNotify) {
       const text = `[文字接龍] 玩家回報可能無解的關卡\n章節：${chapterId}\n關卡：${levelId}\n難度：${difficulty}`
-      await notifyDeveloper('文字接龍：有關卡被回報無解', text)
+      await notifyDeveloper(text)
     }
 
     logger.info('reportUnsolvableLevel recorded', { levelId, chapterId, difficulty, uid: request.auth.uid, notified: shouldNotify })
@@ -849,7 +830,7 @@ export const reportUnsolvableLevel = onCall(
 
 const USER_REGISTERED_FLAGS_COLLECTION = 'userRegisteredFlags'
 
-export const notifyUserRegistered = onCall({ secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY] }, async (request) => {
+export const notifyUserRegistered = onCall({ secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Sign in before registering.')
   }
@@ -868,7 +849,7 @@ export const notifyUserRegistered = onCall({ secrets: [TELEGRAM_BOT_TOKEN, TELEG
 
   if (!alreadyNotified) {
     const text = `[文字接龍] 有新玩家註冊\n方式：${provider}\n名稱：${displayName ?? '（無）'}\nUID：${uid}`
-    await notifyDeveloper('文字接龍：有新玩家註冊', text)
+    await notifyDeveloper(text)
   }
 
   logger.info('notifyUserRegistered recorded', { uid, provider, notified: !alreadyNotified })
