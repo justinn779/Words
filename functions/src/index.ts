@@ -123,6 +123,55 @@ async function existingWords(): Promise<Set<string>> {
   return words
 }
 
+/** Full content (not just ids) for every category already in the shared pool —
+ * built-in SEED plus every previously accepted AI category — the raw material
+ * fillShortfallFromExistingPool draws from. A category recurring across chapters
+ * this way is no different from a SEED category already appearing in multiple
+ * hand-authored chapters today. */
+async function existingCategoriesFull(): Promise<GeneratedCategory[]> {
+  const db = getFirestore()
+  const snap = await db.collection(AI_CATEGORIES_COLLECTION).get()
+  const fromAi: GeneratedCategory[] = snap.docs.map((d) => {
+    const data = d.data() as { name?: string; words?: string[] }
+    return { categoryId: d.id, name: data.name ?? d.id, words: Array.isArray(data.words) ? data.words : [] }
+  })
+  return [...SEED.map((row) => ({ categoryId: row.categoryId, name: row.name, words: row.words })), ...fromAi]
+}
+
+/** The guarantee that chapter generation never simply gives up: if `accepted`
+ * (whatever OpenAI produced and passed verification) falls short of
+ * `minAccepted`, tops it up with categories already known-good — built-in SEED
+ * plus previously accepted AI content — until the target is met or the whole
+ * shared pool is exhausted (34+ SEED categories alone, so this cannot realistically
+ * come up short). These are never re-persisted to aiCategories (they're already
+ * there, or built-in) and never re-run through the solver (already verified when
+ * first accepted, or hand-authored) — see the callers for why only the genuinely
+ * new portion of the return value gets persisted. */
+async function fillShortfallFromExistingPool(
+  accepted: VerifiedCategory[],
+  /** categoryIds already picked for THIS chapter's own pool (just `accepted`'s
+   * own ids) — deliberately not the whole game's existingCategoryIds(), since
+   * reusing a category that's already in some OTHER chapter is completely fine
+   * (see existingCategoriesFull's comment) and excluding all of them would empty
+   * out the very pool this function exists to draw from. */
+  usedIds: Set<string>,
+  minAccepted: number,
+): Promise<VerifiedCategory[]> {
+  if (accepted.length >= minAccepted) return accepted
+  const rng = createRng(`fallback-${[...usedIds].sort().join(',')}`)
+  const pool = await existingCategoriesFull()
+  const candidates = shuffle(
+    pool.filter((c) => !usedIds.has(c.categoryId)),
+    rng,
+  )
+  const filled = [...accepted]
+  for (const cat of candidates) {
+    if (filled.length >= minAccepted) break
+    filled.push({ ...cat })
+  }
+  return filled
+}
+
 /** Keeps only the candidates that are well-formed, don't reuse a word that's
  * already spoken for by some OTHER category (see existingWords above — this is
  * a distinct check from the categoryId collision below), AND solver-verified,
@@ -322,13 +371,19 @@ export const generateAiCategoriesNow = onCall({ secrets: [OPENAI_API_KEY] }, asy
 const AI_CHAPTERS_COLLECTION = 'aiChapters'
 
 const AI_CHAPTER_IDS = ['science-world', 'history-culture', 'curious-facts'] as const
-type AiChapterId = (typeof AI_CHAPTER_IDS)[number]
 
-const CHAPTER_THEME_HINT: Record<AiChapterId, string> = {
-  'science-world': '科學世界（天文、物理、化學、生物、地球科學等主題）',
-  'history-culture': '歷史文化（歷史事件、古文明、傳統習俗、歷史人物等主題，避免政治敏感或近代爭議內容）',
-  'curious-facts': '奇妙知識（趣味冷知識、罕見自然現象、有趣的科學小常識等主題）',
-}
+// These 3 chapters used to each ask OpenAI for categories under a narrow topic
+// hint (e.g. science-world only wanted astronomy/physics/chemistry/biology/earth
+// science). In production that narrow a vocabulary collided with itself and with
+// existing categories often enough that a chapter could fall short of the 5
+// categories a 'hard' level needs and give up entirely — a player reaching that
+// chapter just saw it stuck. Two changes fix that: no per-chapter theme anymore
+// (generateCategories below is called with no theme, same as the untied
+// dailyAiCategoryRefresh/generateAiCategoriesNow top-up — a bigger, mixed
+// vocabulary is far less collision-prone, and matches how Daily Challenge itself
+// mixes categories freely rather than sticking to one topic), and
+// fillShortfallFromExistingPool below, which guarantees a chapter is never
+// short — generation now literally cannot fail to produce a playable chapter.
 
 /** Same 5-level shape as arts-entertainment in scripts/generate-levels.ts's PLAN —
  * a reasonable single-chapter size that also matches CHAPTER_CATEGORY_POOL_TARGET. */
@@ -445,29 +500,49 @@ export const generateNextChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeou
   try {
     const existingIds = await existingCategoryIds()
     const existingWordSet = await existingWords()
-    const theme = CHAPTER_THEME_HINT[chapterId as AiChapterId]
-    const topUp = await generateCategoriesWithTopUp(
-      (excludedIds, count) => generateCategories(OPENAI_API_KEY.value(), excludedIds, count, theme),
-      existingIds,
-      existingWordSet,
-      DIFFICULTY_SHAPE.hard.categoryCount,
-      CHAPTER_CATEGORY_POOL_TARGET,
-    )
-    const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), topUp.accepted)
-    const accepted = review.kept
-    const rejected = [...topUp.rejected, ...review.rejected]
-    logger.info('generateNextChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
-
-    if (accepted.length < DIFFICULTY_SHAPE.hard.categoryCount) {
-      throw new Error(
-        `only ${accepted.length} categories passed verification, need >= ${DIFFICULTY_SHAPE.hard.categoryCount} for a 'hard' level`,
+    let accepted: VerifiedCategory[] = []
+    let rejected: { categoryId: string; reason: string }[] = []
+    try {
+      // No theme hint — see the comment above AI_CHAPTER_IDS for why. A wide-
+      // open ask (same shape as dailyAiCategoryRefresh's top-up) has far more
+      // room to avoid colliding with the existing pool than a narrow topic did.
+      const topUp = await generateCategoriesWithTopUp(
+        (excludedIds, count) => generateCategories(OPENAI_API_KEY.value(), excludedIds, count),
+        existingIds,
+        existingWordSet,
+        DIFFICULTY_SHAPE.hard.categoryCount,
+        CHAPTER_CATEGORY_POOL_TARGET,
       )
+      const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), topUp.accepted)
+      accepted = review.kept
+      rejected = [...topUp.rejected, ...review.rejected]
+    } catch (err) {
+      // OpenAI itself unreachable/malformed — not fatal, fillShortfallFromExistingPool
+      // below fills the entire chapter from the existing pool instead.
+      logger.warn('generateNextChapterNow: AI category generation failed, falling back to existing pool', {
+        chapterId,
+        error: String(err),
+      })
     }
+    logger.info('generateNextChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
 
     await persistAcceptedCategories(accepted)
 
-    const pool: Category[] = accepted.map((cat) => toEngineShape(cat).category)
-    const words: WordEntry[] = accepted.flatMap((cat) => toEngineShape(cat).words)
+    const filled = await fillShortfallFromExistingPool(
+      accepted,
+      new Set(accepted.map((c) => c.categoryId)),
+      DIFFICULTY_SHAPE.hard.categoryCount,
+    )
+    if (filled.length > accepted.length) {
+      logger.info('generateNextChapterNow topped up shortfall from existing pool', {
+        chapterId,
+        newlyGenerated: accepted.length,
+        filledFromPool: filled.length - accepted.length,
+      })
+    }
+
+    const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
+    const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
     const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
     if (unsolvedIds.length > 0) {
       logger.warn('generateNextChapterNow: some levels unverified', { chapterId, unsolvedIds })
@@ -533,55 +608,100 @@ export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeout
   try {
     const existingIds = await existingCategoryIds()
     const existingWordSet = await existingWords()
-    const existingTitles = await existingChapterTitles()
-    const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
-    const chapterTitle = seed.chapterTitle
-    logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
 
-    // The theme is only invented once (by generateNewChapterContent above) —
-    // any top-up rounds below ask for more categories under that SAME theme
-    // (via generateCategories' theme hint), they don't re-invent a new one.
-    const excludedIds = new Set(existingIds)
-    const excludedWords = new Set(existingWordSet)
-    let { accepted, rejected } = verifyCategoryCandidatesFrom(seed.categories, [...excludedIds], excludedWords)
-    for (const cat of accepted) {
-      excludedIds.add(cat.categoryId)
-      for (const w of cat.words) excludedWords.add(w)
-    }
+    // A brand-new chapter's title only makes sense if OpenAI actually invents
+    // one — but everything downstream of it (the categories) still has the same
+    // guarantee as generateNextChapterNow: any failure anywhere in this
+    // AI-dependent chain (theme invention, top-up rounds, review) is not fatal —
+    // it just leaves chapterTitle unset and accepted empty, and
+    // fillShortfallFromExistingPool below fills the whole chapter from the
+    // existing pool. getChapterDisplayTitle (src/data/progression.ts) already
+    // renders a chapter with no AI title as a plain "第N章", so this degrades
+    // gracefully rather than leaving the chapter stuck.
+    let chapterTitle: string | undefined
+    let accepted: VerifiedCategory[] = []
+    let rejected: { categoryId: string; reason: string }[] = []
+    try {
+      const existingTitles = await existingChapterTitles()
+      const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
+      chapterTitle = seed.chapterTitle
+      logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
 
-    for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
-      const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
-      const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, chapterTitle)
-      const verified = verifyCategoryCandidatesFrom(more, [...excludedIds], excludedWords)
-      for (const cat of verified.accepted) {
+      const excludedIds = new Set(existingIds)
+      const excludedWords = new Set(existingWordSet)
+      const initial = verifyCategoryCandidatesFrom(seed.categories, [...excludedIds], excludedWords)
+      accepted = initial.accepted
+      rejected = initial.rejected
+      for (const cat of accepted) {
         excludedIds.add(cat.categoryId)
         for (const w of cat.words) excludedWords.add(w)
       }
-      accepted = [...accepted, ...verified.accepted]
-      rejected = [...rejected, ...verified.rejected]
-    }
 
-    const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), accepted)
-    accepted = review.kept
-    rejected = [...rejected, ...review.rejected]
+      // The theme is only invented once (above) — these top-up rounds ask for
+      // more categories under that SAME theme, they don't re-invent a new one.
+      for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
+        const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
+        const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, chapterTitle)
+        const verified = verifyCategoryCandidatesFrom(more, [...excludedIds], excludedWords)
+        for (const cat of verified.accepted) {
+          excludedIds.add(cat.categoryId)
+          for (const w of cat.words) excludedWords.add(w)
+        }
+        accepted = [...accepted, ...verified.accepted]
+        rejected = [...rejected, ...verified.rejected]
+      }
+
+      const review = await reviewAcceptedCategories(OPENAI_API_KEY.value(), accepted)
+      accepted = review.kept
+      rejected = [...rejected, ...review.rejected]
+    } catch (err) {
+      logger.warn('generateNewChapterNow: AI theme/category generation failed, falling back to the existing pool with a generic title', {
+        chapterId,
+        order,
+        error: String(err),
+      })
+      chapterTitle = undefined
+      accepted = []
+      rejected = []
+    }
     logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
-
-    if (accepted.length < DIFFICULTY_SHAPE.hard.categoryCount) {
-      throw new Error(
-        `only ${accepted.length} categories passed verification after retries, need >= ${DIFFICULTY_SHAPE.hard.categoryCount} for a 'hard' level`,
-      )
-    }
 
     await persistAcceptedCategories(accepted)
 
-    const pool: Category[] = accepted.map((cat) => toEngineShape(cat).category)
-    const words: WordEntry[] = accepted.flatMap((cat) => toEngineShape(cat).words)
+    // Same guarantee as generateNextChapterNow — if this new theme didn't yield
+    // enough verified categories of its own, top up from the existing pool
+    // rather than leaving the chapter stuck. The chapter still gets its own
+    // freshly-invented title even when some of its categories end up being
+    // familiar ones.
+    const filled = await fillShortfallFromExistingPool(
+      accepted,
+      new Set(accepted.map((c) => c.categoryId)),
+      DIFFICULTY_SHAPE.hard.categoryCount,
+    )
+    if (filled.length > accepted.length) {
+      logger.info('generateNewChapterNow topped up shortfall from existing pool', {
+        chapterId,
+        newlyGenerated: accepted.length,
+        filledFromPool: filled.length - accepted.length,
+      })
+    }
+
+    const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
+    const words: WordEntry[] = filled.flatMap((cat) => toEngineShape(cat).words)
     const { levels, unsolvedIds } = buildChapterLevels(chapterId, pool, words)
     if (unsolvedIds.length > 0) {
       logger.warn('generateNewChapterNow: some levels unverified', { chapterId, unsolvedIds })
     }
 
-    await chapterRef.set({ status: 'ready', title: chapterTitle, order, levels, readyAt: FieldValue.serverTimestamp() })
+    // Firestore rejects an explicit `undefined` field value outright — omit
+    // `title` entirely on the no-AI-theme fallback path rather than write one.
+    await chapterRef.set({
+      status: 'ready',
+      ...(chapterTitle ? { title: chapterTitle } : {}),
+      order,
+      levels,
+      readyAt: FieldValue.serverTimestamp(),
+    })
     logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
     return { chapterId, title: chapterTitle, order, levels }
   } catch (err) {
