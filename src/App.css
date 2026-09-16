@@ -328,6 +328,27 @@
   font-size: 13px;
 }
 
+.hud-report {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.hud-report-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.hud-report-confirm button {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--paper-deep);
+  background: var(--card-bg);
+  font-size: 13px;
+}
+
 .top-row {
   display: flex;
   flex-wrap: wrap;

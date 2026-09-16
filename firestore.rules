@@ -35,5 +35,13 @@ service cloud.firestore {
     match /meta/{docId} {
       allow read, write: if false;
     }
+
+    // "Report an unsolvable level" flags (functions/src/index.ts's
+    // reportUnsolvableLevel) — written only by that Cloud Function (Admin SDK
+    // bypasses these rules); the client submits a report through the callable,
+    // never by writing here directly, and has no reason to read it either.
+    match /levelReportFlags/{levelId} {
+      allow read, write: if false;
+    }
   }
 }

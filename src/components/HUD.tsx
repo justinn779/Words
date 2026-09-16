@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useGameStore, getElapsedMs } from '../store/gameStore'
 import { usePlayerStore } from '../store/playerStore'
 import { HINT_LEVEL_1_COST, HINT_LEVEL_2_COST, UNDO_COST } from '../engine'
@@ -19,10 +19,12 @@ export default function HUD() {
   const tick = useGameStore((s) => s.tick)
   const undo = useGameStore((s) => s.undo)
   const requestHint = useGameStore((s) => s.requestHint)
+  const reportCurrentLevel = useGameStore((s) => s.reportCurrentLevel)
   const exitLevel = useGameStore((s) => s.exitLevel)
   const message = useGameStore((s) => s.message)
   const dismissMessage = useGameStore((s) => s.dismissMessage)
   const coins = usePlayerStore((s) => s.coins)
+  const [confirmingReport, setConfirmingReport] = useState(false)
 
   useEffect(() => {
     if (!game || game.status !== 'playing') return
@@ -59,6 +61,27 @@ export default function HUD() {
         <button type="button" onClick={() => requestHint(2)}>
           提示 II ({HINT_LEVEL_2_COST})
         </button>
+        {confirmingReport ? (
+          <span className="hud-report-confirm">
+            確定要回報這關無解嗎？
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmingReport(false)
+                void reportCurrentLevel()
+              }}
+            >
+              確定回報
+            </button>
+            <button type="button" onClick={() => setConfirmingReport(false)}>
+              取消
+            </button>
+          </span>
+        ) : (
+          <button type="button" className="hud-report" onClick={() => setConfirmingReport(true)} aria-label="回報這關卡沒有解">
+            ❗ 回報無解
+          </button>
+        )}
       </div>
       {message && <div className="hud-message">{message}</div>}
     </div>

@@ -32,6 +32,9 @@ import { generateCategories, generateNewChapterContent, reviewCategories, type G
 initializeApp()
 
 const OPENAI_API_KEY = defineSecret('OPENAI_API_KEY')
+const TELEGRAM_BOT_TOKEN = defineSecret('TELEGRAM_BOT_TOKEN')
+const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID')
+const RESEND_API_KEY = defineSecret('RESEND_API_KEY')
 
 const AI_CATEGORIES_COLLECTION = 'aiCategories'
 const MIN_WORDS = 8
@@ -587,3 +590,95 @@ export const generateNewChapterNow = onCall({ secrets: [OPENAI_API_KEY], timeout
     throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
   }
 })
+
+// --- "Report an unsolvable level" ------------------------------------------------
+//
+// The generator's solver (src/engine/generator.ts) is a best-effort check, not a
+// proof — it's deliberately kept cheap (bounded attempts/states, see that file's
+// comments) rather than tuned for perfect coverage, because the search budget
+// needed to guarantee every level solves scales with board size in a way that
+// would mean shrinking the game itself just to keep the checker fast. That
+// trade-off is intentional: gameplay (deck size, difficulty curve) is never
+// adjusted for the solver's convenience. This is the other half of that trade —
+// a low-friction way for a player who actually gets stuck to flag the specific
+// level, so it can be fixed by hand instead.
+
+const REPORT_NOTIFY_EMAIL = 'justinn779@gmail.com'
+const LEVEL_REPORT_FLAGS_COLLECTION = 'levelReportFlags'
+const REPORT_ID_RE = /^[a-zA-Z0-9-]{1,80}$/
+
+async function sendTelegramNotification(token: string, chatId: string, text: string): Promise<void> {
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: chatId, text }),
+  })
+  if (!res.ok) throw new Error(`Telegram API responded ${res.status}: ${await res.text()}`)
+}
+
+async function sendReportEmail(apiKey: string, subject: string, text: string): Promise<void> {
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: 'onboarding@resend.dev', to: [REPORT_NOTIFY_EMAIL], subject, text }),
+  })
+  if (!res.ok) throw new Error(`Resend API responded ${res.status}: ${await res.text()}`)
+}
+
+/** Player-facing callable (see src/firebase/reports.ts and HUD.tsx's "❗ 回報無解"
+ * button): records that `levelId` was flagged as possibly unsolvable, and — only
+ * the first time this happens while the flag is unresolved — notifies the
+ * developer over Telegram and email so it can be fixed by hand. Further reports
+ * of the same still-open level just bump a counter rather than re-notifying, so
+ * one broken level going viral doesn't spam either channel. Once the level is
+ * fixed and re-verified, the fix workflow deletes/resolves this flag doc so a
+ * future regression can notify again. */
+export const reportUnsolvableLevel = onCall(
+  { secrets: [TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, RESEND_API_KEY] },
+  async (request) => {
+    if (!request.auth) {
+      throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before reporting a level.')
+    }
+    const levelId = String(request.data?.levelId ?? '')
+    const chapterId = String(request.data?.chapterId ?? '')
+    const difficulty = String(request.data?.difficulty ?? '')
+    if (!REPORT_ID_RE.test(levelId) || !REPORT_ID_RE.test(chapterId)) {
+      throw new HttpsError('invalid-argument', 'Missing or malformed levelId/chapterId')
+    }
+
+    const db = getFirestore()
+    const flagRef = db.collection(LEVEL_REPORT_FLAGS_COLLECTION).doc(levelId)
+    const shouldNotify = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(flagRef)
+      const data = snap.exists ? (snap.data() as { resolved?: boolean; reportCount?: number }) : undefined
+      const alreadyOpen = data && data.resolved !== true
+      tx.set(
+        flagRef,
+        {
+          chapterId,
+          difficulty,
+          resolved: false,
+          reportCount: (alreadyOpen ? (data?.reportCount ?? 0) : 0) + 1,
+          lastReportedAt: FieldValue.serverTimestamp(),
+          ...(alreadyOpen ? {} : { firstReportedAt: FieldValue.serverTimestamp() }),
+        },
+        { merge: true },
+      )
+      return !alreadyOpen
+    })
+
+    if (shouldNotify) {
+      const text = `[文字接龍] 玩家回報可能無解的關卡\n章節：${chapterId}\n關卡：${levelId}\n難度：${difficulty}`
+      const results = await Promise.allSettled([
+        sendTelegramNotification(TELEGRAM_BOT_TOKEN.value(), TELEGRAM_CHAT_ID.value(), text),
+        sendReportEmail(RESEND_API_KEY.value(), '文字接龍：有關卡被回報無解', text),
+      ])
+      for (const result of results) {
+        if (result.status === 'rejected') logger.error('reportUnsolvableLevel: notification failed', { error: String(result.reason) })
+      }
+    }
+
+    logger.info('reportUnsolvableLevel recorded', { levelId, chapterId, difficulty, uid: request.auth.uid, notified: shouldNotify })
+    return { ok: true }
+  },
+)

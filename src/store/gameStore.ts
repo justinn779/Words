@@ -24,6 +24,7 @@ import { LEVELS } from '../data/levels'
 import { buildDailyLevelConfig, getTodayDateString } from '../data/dailyChallenge'
 import { getLoadedAiContent } from '../firebase/aiContent'
 import { getLoadedAiChapters } from '../firebase/aiChapters'
+import { reportUnsolvableLevel } from '../firebase/reports'
 import { usePlayerStore } from './playerStore'
 import { useContentStore } from './contentStore'
 import { playSfx, type SfxName } from '../audio/sfx'
@@ -85,6 +86,10 @@ interface GameStore {
   draw: () => void
   undo: () => void
   requestHint: (level: 1 | 2) => void
+  /** Sends the current level's id/chapter/difficulty to reportUnsolvableLevel
+   * (functions/src/index.ts), which relays it to the developer for a manual fix —
+   * see src/firebase/reports.ts. Purely a notification; never touches gameplay. */
+  reportCurrentLevel: () => Promise<void>
   dismissMessage: () => void
   tick: () => void
   exitLevel: () => void
@@ -323,6 +328,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return
     }
     set({ game: recordHintUsed(game, cost), hint, selection: null })
+  },
+
+  reportCurrentLevel: async () => {
+    const { levelConfig } = get()
+    if (!levelConfig) return
+    const result = await reportUnsolvableLevel(levelConfig.id, levelConfig.chapterId, levelConfig.difficulty)
+    set({ message: result.ok ? '已回報，謝謝提供！我們會盡快確認' : result.message })
   },
 
   selectAt: (loc) => {
