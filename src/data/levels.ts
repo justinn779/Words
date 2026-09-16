@@ -18,8 +18,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "clothing": 3,
       "tool": 5,
@@ -42,8 +42,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "occupation": 4,
       "animal": 5,
@@ -66,8 +66,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "occupation": 4,
       "furniture": 3,
@@ -92,7 +92,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "fruit": 4,
       "occupation": 6,
@@ -118,7 +118,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "dessert": 6,
       "occupation": 6,
@@ -144,7 +144,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "dessert": 4,
       "occupation": 6,
@@ -155,7 +155,7 @@ export const LEVELS: LevelConfig[] = [
     "targetTwoStarMoves": 43,
     "targetThreeStarTime": 161,
     "targetTwoStarTime": 240,
-    "seed": "daily-life-06-s1"
+    "seed": "daily-life-06-s0"
   },
   {
     "id": "daily-life-07",
@@ -171,7 +171,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "appliance": 6,
       "vehicle": 7,
@@ -183,7 +183,7 @@ export const LEVELS: LevelConfig[] = [
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "daily-life-07-s3"
+    "seed": "daily-life-07-s0"
   },
   {
     "id": "daily-life-08",
@@ -199,7 +199,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "stationery": 5,
       "color": 7,
@@ -224,8 +224,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "insect": 4,
       "flower": 5,
@@ -248,8 +248,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "insect": 5,
       "planet": 4,
@@ -274,7 +274,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "bird": 6,
       "marine": 4,
@@ -300,7 +300,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "marine": 4,
       "insect": 6,
@@ -327,7 +327,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "scenery": 5,
       "insect": 6,
@@ -355,7 +355,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "scenery": 7,
       "insect": 7,
@@ -380,8 +380,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "fruit": 4,
       "dessert": 5,
@@ -404,8 +404,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "festival": 3,
       "drink": 4,
@@ -430,7 +430,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "drink": 6,
       "cuisine": 6,
@@ -456,7 +456,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "dessert": 6,
       "cuisine": 4,
@@ -483,7 +483,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "cuisine": 5,
       "dessert": 5,
@@ -495,7 +495,7 @@ export const LEVELS: LevelConfig[] = [
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "food-culture-05-s1"
+    "seed": "food-culture-05-s0"
   },
   {
     "id": "food-culture-06",
@@ -511,7 +511,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "cuisine": 5,
       "drink": 7,
@@ -523,7 +523,7 @@ export const LEVELS: LevelConfig[] = [
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "food-culture-06-s4"
+    "seed": "food-culture-06-s0"
   },
   {
     "id": "world-travel-01",
@@ -536,8 +536,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "country": 4,
       "cuisine": 5,
@@ -560,8 +560,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "occupation": 5,
       "city": 4,
@@ -586,7 +586,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "city": 6,
       "vehicle": 4,
@@ -612,7 +612,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "occupation": 6,
       "city": 4,
@@ -639,7 +639,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "cuisine": 5,
       "vehicle": 6,
@@ -651,7 +651,7 @@ export const LEVELS: LevelConfig[] = [
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "world-travel-05-s2"
+    "seed": "world-travel-05-s0"
   },
   {
     "id": "world-travel-06",
@@ -667,7 +667,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 18,
     "categoryWordCounts": {
       "cuisine": 5,
       "occupation": 7,
@@ -679,7 +679,7 @@ export const LEVELS: LevelConfig[] = [
     "targetTwoStarMoves": 63,
     "targetThreeStarTime": 235,
     "targetTwoStarTime": 350,
-    "seed": "world-travel-06-s1"
+    "seed": "world-travel-06-s0"
   },
   {
     "id": "arts-entertainment-01",
@@ -692,8 +692,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "architecture": 5,
       "musicGenre": 4,
@@ -716,8 +716,8 @@ export const LEVELS: LevelConfig[] = [
     ],
     "columnCount": 4,
     "categorySlotCount": 2,
-    "deckEnabled": false,
-    "deckSize": 0,
+    "deckEnabled": true,
+    "deckSize": 8,
     "categoryWordCounts": {
       "instrument": 5,
       "architecture": 3,
@@ -742,7 +742,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "filmGenre": 6,
       "instrument": 6,
@@ -768,7 +768,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 5,
     "categorySlotCount": 2,
     "deckEnabled": true,
-    "deckSize": 7,
+    "deckSize": 12,
     "categoryWordCounts": {
       "filmGenre": 6,
       "instrument": 4,
@@ -794,7 +794,7 @@ export const LEVELS: LevelConfig[] = [
     "columnCount": 6,
     "categorySlotCount": 3,
     "deckEnabled": true,
-    "deckSize": 9,
+    "deckSize": 14,
     "categoryWordCounts": {
       "filmGenre": 7,
       "musicGenre": 7,

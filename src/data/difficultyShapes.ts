@@ -6,33 +6,17 @@ export interface DifficultyShape {
   columnCount: number
   slotCount: number
   deckEnabled: boolean
-  deckSize: number
 }
 
 // Shared by the offline level generator (scripts/generate-levels.ts) and any
 // runtime level construction (Daily Challenge) so both always agree on what
-// "easy/normal/hard" means structurally.
+// "easy/normal/hard" means structurally. Every difficulty now deals a deck —
+// even 'easy' used to have none at all — and deckSize itself is no longer a
+// fixed per-difficulty constant here; see computeDeckSize below.
 export const DIFFICULTY_SHAPE: Record<Difficulty, DifficultyShape> = {
-  easy: { categoryCount: 3, columnCount: 4, slotCount: 2, deckEnabled: false, deckSize: 0 },
-  // deckSize bumped 6 -> 7 (25% -> 29% of the board hidden in the deck) to raise
-  // difficulty a little without growing the board itself. A bigger jump (6 -> 8)
-  // was tried and reverted: it isn't just harder for the player, it's much harder
-  // for src/engine/solver.ts's plain DFS too (more deck/waste cycling options per
-  // state blows up the branching factor), and offline generation stopped
-  // finishing in reasonable time — same failure mode as the categoryCount/
-  // columnCount bumps noted below, just from a different knob.
-  normal: { categoryCount: 4, columnCount: 5, slotCount: 2, deckEnabled: true, deckSize: 7 },
-  // categoryCount/columnCount/deckSize unchanged from the original shape — see the
-  // long comment on scripts/generate-levels.ts's PLAN for why on the first two.
-  // deckSize turned out to be just as sensitive: even a +1 bump (9 -> 10) was
-  // tried here and reverted — twice, at +1 and +3 — because it consistently made
-  // src/engine/solver.ts's plain DFS hang for 5+ minutes on this shape's first
-  // 'hard' level during offline generation (bigger deck/waste cycling options per
-  // state blow up the branching factor badly once columnCount/categoryCount are
-  // already at hard's larger values). "Hard" gets harder here only through *more
-  // hard levels per chapter* (see PLAN) and the varied per-category word counts
-  // below — both free wins the DFS solver doesn't pay extra for.
-  hard: { categoryCount: 5, columnCount: 6, slotCount: 3, deckEnabled: true, deckSize: 9 },
+  easy: { categoryCount: 3, columnCount: 4, slotCount: 2, deckEnabled: true },
+  normal: { categoryCount: 4, columnCount: 5, slotCount: 2, deckEnabled: true },
+  hard: { categoryCount: 5, columnCount: 6, slotCount: 3, deckEnabled: true },
 }
 
 export const WORDS_PER_CATEGORY: Record<Difficulty, number> = { easy: 4, normal: 5, hard: 6 }
@@ -73,6 +57,18 @@ export function varyWordCounts(rng: () => number, difficulty: Difficulty, catego
  * that counts aren't uniform. */
 export function totalCardCount(categoryWordCounts: Record<string, number>): number {
   return Object.values(categoryWordCounts).reduce((sum, n) => sum + n + 1, 0)
+}
+
+/**
+ * Deck size for a level: half its total card pool, so the deck ends up the
+ * same size as the columns it's dealt alongside (createGame.ts splits the
+ * shuffled pool deckSize/rest between the two) — a much bigger share of the
+ * board hidden in the deck than the old fixed per-difficulty counts (0 for
+ * easy, 7 for normal, 9 for hard), by explicit request: with most of the
+ * board visible up front, the game had gotten too easy.
+ */
+export function computeDeckSize(categoryWordCounts: Record<string, number>): number {
+  return Math.round(totalCardCount(categoryWordCounts) / 2)
 }
 
 /**

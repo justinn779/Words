@@ -12,7 +12,7 @@ import { CATEGORIES } from '../src/data/categories'
 import { WORDS } from '../src/data/words'
 import { createRng, shuffle } from '../src/engine/rng'
 import { generateSolvableLevel, type LevelConfigWithoutSeed } from '../src/engine/generator'
-import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets } from '../src/data/difficultyShapes'
+import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets, computeDeckSize } from '../src/data/difficultyShapes'
 import type { Difficulty, LevelConfig } from '../src/engine/types'
 
 interface ChapterPlan {
@@ -74,7 +74,7 @@ function buildBaseConfig(
     columnCount: shape.columnCount,
     categorySlotCount: shape.slotCount,
     deckEnabled: shape.deckEnabled,
-    deckSize: shape.deckSize,
+    deckSize: computeDeckSize(categoryWordCounts),
     categoryWordCounts,
     // Placeholder — overwritten once the solver reports a real move count.
     targetThreeStarMoves: 0,
@@ -97,7 +97,13 @@ function generateChapter(plan: ChapterPlan): { levels: LevelConfig[]; warnings: 
     const categoryWordCounts = varyWordCounts(rng, difficulty, categoryIds)
     const base = buildBaseConfig(plan.chapterId, difficulty, index, categoryIds, categoryWordCounts)
 
-    const result = generateSolvableLevel(base, CATEGORIES, WORDS)
+    // deckSize = half the board (see difficultyShapes.ts's computeDeckSize) makes
+    // the DFS solver's branching factor blow up — the old defaults (8 attempts x
+    // 60000 states) don't finish in reasonable time on boards this size. Try only
+    // the first seed with a much smaller budget and accept it either way; a level
+    // that doesn't solve within that budget gets flagged unverified below rather
+    // than retried at the same (still-too-expensive) cost.
+    const result = generateSolvableLevel(base, CATEGORIES, WORDS, { maxAttempts: 1, maxStates: 4000 })
     const targets = estimateTargets(totalCardCount(categoryWordCounts))
 
     if (!result.solvable) {
