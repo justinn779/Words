@@ -6,7 +6,6 @@ import type { LevelConfig } from '../types'
 
 const baseConfig: LevelConfig = {
   id: 'test-1',
-  chapterId: 'test',
   difficulty: 'easy',
   categoryIds: ['fruit', 'animal'],
   columnCount: 4,

@@ -1,11 +1,9 @@
-import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { useGameStore } from '../store/gameStore'
 import { usePlayerStore } from '../store/playerStore'
 import { useContentStore } from '../store/contentStore'
 import { ACHIEVEMENTS } from '../data/achievements'
-import { getChapterDisplayTitle, getChapterLevels, getContentChapterOrder, isChapterUnlocked, isNextNewChapterGateOpen } from '../data/progression'
-import { GENERATING_NEW_CHAPTER } from '../store/contentStore'
+import { levelId, levelIdToNumber } from '../data/progression'
 import { DAILY_DIFFICULTIES } from '../data/dailyChallenge'
 
 const DAILY_DIFFICULTY_LABEL: Record<string, string> = { easy: '簡單', normal: '普通', hard: '困難' }
@@ -39,47 +37,19 @@ export default function WinModal() {
   const startDailyLevel = useGameStore((s) => s.startDailyLevel)
   const exitLevel = useGameStore((s) => s.exitLevel)
   const animationsOn = usePlayerStore((s) => s.settings.animationsOn)
-  // recordWin() has already run by the time this renders (gameStore.finalizeMove calls it
-  // before setting won/score), so this reflects the just-earned stars from this very win.
-  const levelRecords = usePlayerStore((s) => s.levelRecords)
-  const aiChapters = useContentStore((s) => s.aiChapters)
-  const generatingChapterId = useContentStore((s) => s.generatingChapterId)
-  const generateNewChapter = useContentStore((s) => s.generateNewChapter)
-  const [genError, setGenError] = useState<string | null>(null)
-  const extraLevels = Object.values(aiChapters).flatMap((e) => e.levels)
+  const levels = useContentStore((s) => s.levels)
+  const generatingLevelNumbers = useContentStore((s) => s.generatingLevelNumbers)
 
   if (!game || game.status !== 'won' || !score || !levelConfig) return null
 
-  const chapterLevels = getChapterLevels(levelConfig.chapterId, extraLevels)
-  const levelIndex = chapterLevels.findIndex((l) => l.id === levelConfig.id)
-  const nextLevel = !dailyDate ? chapterLevels[levelIndex + 1] : undefined
-
-  // Finished a chapter's last level: offer to jump straight into the next one, if it
-  // has content and just got unlocked (or already was).
-  const contentOrder = getContentChapterOrder(extraLevels)
-  const chapterOrderIndex = contentOrder.indexOf(levelConfig.chapterId)
-  const nextChapterId = !dailyDate && !nextLevel && chapterOrderIndex >= 0 ? contentOrder[chapterOrderIndex + 1] : undefined
-  const nextChapterFirstLevel = nextChapterId ? getChapterLevels(nextChapterId, extraLevels)[0] : undefined
-  const nextChapterUnlocked = nextChapterId ? isChapterUnlocked(nextChapterId, levelRecords, extraLevels) : false
-  const nextChapterTitle = nextChapterId ? getChapterDisplayTitle(nextChapterId, contentOrder, aiChapters[nextChapterId]?.title) : undefined
-  const showNextChapter = Boolean(nextChapterFirstLevel && nextChapterUnlocked)
-
-  // No next chapter exists yet and the player just finished the actual last
-  // chapter anyone has content for: offer to generate the next one right here
-  // instead of sending the player hunting through the menu (it also
-  // auto-generates on its own the moment they start any level in this chapter —
-  // see gameStore.ts's ensureNextChapterGenerating — this is just a shortcut).
-  // Once it's ready, nextChapterId/showNextChapter above pick it up on the next
-  // render exactly like any other next chapter — no separate navigation needed.
-  const isAtFrontier = contentOrder[contentOrder.length - 1] === levelConfig.chapterId
-  const canGenerateNewChapter = !dailyDate && !nextLevel && !nextChapterId && isAtFrontier && isNextNewChapterGateOpen(levelRecords, extraLevels)
-  const generatingNewChapter = generatingChapterId === GENERATING_NEW_CHAPTER
-
-  const handleGenerateNewChapter = async () => {
-    setGenError(null)
-    const result = await generateNewChapter()
-    if (!result.ok) setGenError(result.message)
-  }
+  // Every level is generated ahead of time (contentStore.ts's AHEAD_BUFFER), so
+  // by the time a player finishes one, the next should already exist — this is
+  // just a lookup, not a trigger (gameStore.ts's startLevel already keeps the
+  // buffer topped up).
+  const currentLevelNumber = !dailyDate ? levelIdToNumber(levelConfig.id) : undefined
+  const nextLevelNumber = currentLevelNumber !== undefined ? currentLevelNumber + 1 : undefined
+  const nextLevelReady = nextLevelNumber !== undefined && Boolean(levels[nextLevelNumber])
+  const nextLevelGenerating = nextLevelNumber !== undefined && generatingLevelNumbers.includes(nextLevelNumber)
 
   // Daily Challenge has no per-level unlock records (it's rebuilt fresh every day),
   // so "next" here just means the next difficulty in today's fixed easy/normal/hard
@@ -185,31 +155,25 @@ export default function WinModal() {
             </>
           ) : (
             <>
-              {nextLevel && (
-                <button type="button" className="primary" onClick={() => startLevel(nextLevel.id)}>
+              {nextLevelReady && nextLevelNumber !== undefined && (
+                <button type="button" className="primary" onClick={() => startLevel(levelId(nextLevelNumber))}>
                   下一關
                 </button>
               )}
-              {showNextChapter && nextChapterFirstLevel && (
-                <button type="button" className="primary" onClick={() => startLevel(nextChapterFirstLevel.id)}>
-                  下一章節：{nextChapterTitle ?? ''}
-                </button>
-              )}
-              {canGenerateNewChapter && (
-                <button type="button" className="primary" disabled={generatingNewChapter} onClick={handleGenerateNewChapter}>
-                  {generatingNewChapter ? '生成中…' : '🪄 用 AI 生成全新章節'}
+              {!nextLevelReady && nextLevelGenerating && (
+                <button type="button" className="primary" disabled>
+                  🪄 下一關生成中…
                 </button>
               )}
               <button type="button" onClick={() => startLevel(levelConfig.id)}>
                 再玩一次
               </button>
               <button type="button" onClick={exitLevel}>
-                返回章節
+                返回關卡列表
               </button>
             </>
           )}
         </div>
-        {genError && <p className="wb-hint">{genError}</p>}
       </motion.div>
     </div>
   )

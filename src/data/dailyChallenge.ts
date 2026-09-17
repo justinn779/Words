@@ -4,13 +4,13 @@
 // function of its seed AND its category pool, every player who opens the app on
 // the same day gets the exact same table for a given difficulty — which is why
 // the pool below is cut off at that day's start (loadAiCategoriesCreatedBefore):
-// without the cutoff, a category an AI chapter generates mid-day would silently
-// join the pool for players loading afterward but not before.
+// without the cutoff, a category an AI-generated level accepts mid-day would
+// silently join the pool for players loading afterward but not before.
 //
 // This category pool is no longer purely offline: with every level now dynamic
 // (no more hand-authored src/data/levels.ts), the built-in SEED set alone is too
 // thin on its own, so this always merges in the shared AI-generated pool —
-// requiring network/Firebase the same way any other chapter does.
+// requiring network/Firebase the same way any other level does.
 
 import type { Difficulty, LevelConfig } from '../engine/types'
 import { CATEGORIES } from './categories'
@@ -54,7 +54,6 @@ export async function buildDailyLevelConfig(date: string, difficulty: Difficulty
 
   return {
     id: `daily-${date}-${difficulty}`,
-    chapterId: 'daily-challenge',
     difficulty,
     categoryIds,
     columnCount: shape.columnCount,

@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import Home from './components/Home'
-import ChapterList from './components/ChapterList'
-import LevelList from './components/LevelList'
+import LevelGrid from './components/LevelGrid'
 import DailyChallenge from './components/DailyChallenge'
 import Missions from './components/Missions'
 import Achievements from './components/Achievements'
@@ -15,8 +14,7 @@ import './App.css'
 
 type Screen =
   | { name: 'home' }
-  | { name: 'chapters' }
-  | { name: 'levels'; chapterId: string }
+  | { name: 'levels' }
   | { name: 'daily' }
   | { name: 'missions' }
   | { name: 'achievements' }
@@ -25,10 +23,9 @@ type Screen =
 function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' })
   const game = useGameStore((s) => s.game)
-  const levelConfig = useGameStore((s) => s.levelConfig)
   const dailyDate = useGameStore((s) => s.dailyDate)
   const initCloud = usePlayerStore((s) => s.initCloud)
-  const loadAiChapters = useContentStore((s) => s.loadAiChapters)
+  const loadLevels = useContentStore((s) => s.loadLevels)
   const animationsOn = usePlayerStore((s) => s.settings.animationsOn)
 
   useEffect(() => {
@@ -36,31 +33,25 @@ function App() {
     // Background top-up only — Daily Challenge works with zero AI content, this
     // just lets it use some once it's loaded (see src/firebase/aiContent.ts).
     ensureAiContentLoaded()
-    // Picks up any AI-generated chapters other players already triggered (see
-    // src/firebase/aiChapters.ts) so ChapterList/WinModal show them immediately
+    // Picks up any generated levels other players already triggered (see
+    // src/firebase/levels.ts) so LevelGrid/WinModal show them immediately
     // instead of offering to regenerate content that already exists.
-    loadAiChapters()
-  }, [initCloud, loadAiChapters])
+    loadLevels()
+  }, [initCloud, loadLevels])
 
   useEffect(() => {
     document.documentElement.classList.toggle('animations-off', !animationsOn)
   }, [animationsOn])
 
-  // Keeps the 'levels' screen pointed at whichever chapter is actually being
-  // played, even when WinModal jumps the player straight into a new chapter
-  // (its "下一章節"/"下一關" buttons call startLevel directly, bypassing
-  // setScreen) — otherwise exiting back out would land on the chapter the
-  // player *entered* the board from, not the one they were just playing.
-  // Daily Challenge levels don't have a real "levels" screen to return to
-  // (WinModal's own "返回每日挑戰" exits straight to the daily screen).
+  // Jump straight to the level grid once a level finishes (WinModal's own
+  // "下一關" calls startLevel directly, bypassing setScreen) — otherwise
+  // exiting back out would land wherever the player was before, not the grid.
+  // Daily Challenge levels exit straight to the daily screen instead (see
+  // WinModal's "返回每日挑戰"), so this only applies to the regular sequence.
   useEffect(() => {
-    if (!levelConfig || dailyDate) return
-    setScreen((prev) =>
-      prev.name === 'levels' && prev.chapterId === levelConfig.chapterId
-        ? prev
-        : { name: 'levels', chapterId: levelConfig.chapterId },
-    )
-  }, [levelConfig, dailyDate])
+    if (!game || dailyDate) return
+    setScreen((prev) => (prev.name === 'levels' ? prev : { name: 'levels' }))
+  }, [game, dailyDate])
 
   if (game) return <Board />
 
@@ -70,17 +61,15 @@ function App() {
     case 'home':
       return (
         <Home
-          onOpenChapters={() => setScreen({ name: 'chapters' })}
+          onOpenLevels={() => setScreen({ name: 'levels' })}
           onOpenDaily={() => setScreen({ name: 'daily' })}
           onOpenMissions={() => setScreen({ name: 'missions' })}
           onOpenAchievements={() => setScreen({ name: 'achievements' })}
           onOpenSettings={() => setScreen({ name: 'settings' })}
         />
       )
-    case 'chapters':
-      return <ChapterList onBack={goHome} onOpenChapter={(chapterId) => setScreen({ name: 'levels', chapterId })} />
     case 'levels':
-      return <LevelList chapterId={screen.chapterId} onBack={() => setScreen({ name: 'chapters' })} />
+      return <LevelGrid onBack={goHome} />
     case 'daily':
       return <DailyChallenge onBack={goHome} />
     case 'missions':

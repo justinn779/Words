@@ -1,94 +1,91 @@
-// Reactive wrapper around src/firebase/aiChapters.ts's module cache. Not persisted
+// Reactive wrapper around src/firebase/levels.ts's module cache. Not persisted
 // (this is shared/global content, not per-player state — see playerStore.ts for
 // that) and separate from playerStore so components that only care about the
 // player's own settings/progress don't re-render on every content load.
 
 import { create } from 'zustand'
 import {
-  ensureAiChaptersLoaded,
-  getLoadedAiChapters,
-  hasAnyChapterEverBeenRequested,
-  refreshAiChapters,
-  requestNewChapterGeneration,
-  type AiChapterEntry,
-} from '../firebase/aiChapters'
+  ensureLevelsLoaded,
+  getLoadedLevels,
+  hasAnyLevelEverBeenRequested,
+  refreshLevels,
+  requestLevelGeneration,
+} from '../firebase/levels'
 import { refreshAiContent } from '../firebase/aiContent'
-import { getContentChapterOrder } from '../data/progression'
+import type { LevelConfig } from '../engine/types'
 
-/** Sentinel generatingChapterId while generateNewChapter's call is in flight —
- * there's no chapterId to key on yet (the server assigns one). */
-export const GENERATING_NEW_CHAPTER = '__new__'
+/** How many not-yet-entered levels should always exist ahead of the player's
+ * current frontier — enough that the level grid never shows an empty/pending
+ * gap right where the player is about to scroll to. */
+const AHEAD_BUFFER = 3
 
 interface ContentState {
-  aiChapters: Record<string, AiChapterEntry>
-  generatingChapterId: string | null
-  loadAiChapters: () => Promise<void>
-  /** Re-checks Firestore fresh (bypassing the one-time cache) and re-runs the
-   * bootstrap check below — see refreshAiChapters's own comment for why this
-   * needs to be more than just loadAiChapters called again. */
-  refreshAndMaybeBootstrap: () => Promise<void>
-  generateNewChapter: () => Promise<{ ok: true; chapterId: string } | { ok: false; message: string }>
-  /** Fire-and-forget: call whenever a player starts a level. Every chapter is
-   * generated on demand now (no more fixed roster) — if that level's chapter is
-   * the current content frontier (the newest chapter anyone has content for),
-   * kicks off generating the next one in the background, so by the time anyone
-   * actually reaches it, it's already there (or at least already in progress),
-   * instead of waiting for a star threshold and a manual button press. No-op if
-   * a generation is already running or chapterId isn't the frontier. */
-  ensureNextChapterGenerating: (chapterId: string) => void
+  levels: Record<number, LevelConfig>
+  generatingLevelNumbers: number[]
+  loadLevels: () => Promise<void>
+  /** Re-checks Firestore fresh (bypassing the one-time cache) and re-runs
+   * whichever of bootstrap/ensureLevelsAhead applies — see refreshLevels's own
+   * comment for why this needs to be more than just loadLevels called again. */
+  refreshAndEnsureAhead: (currentLevelNumber?: number) => Promise<void>
+  generateLevel: (levelNumber: number) => Promise<{ ok: true } | { ok: false; message: string }>
+  /** Call whenever the player's frontier level becomes known (opening the level
+   * grid, or starting a level). Generates whichever of the next AHEAD_BUFFER
+   * levels don't exist yet, in parallel — no-op for any that already exist or
+   * are already generating. */
+  ensureLevelsAhead: (currentLevelNumber: number) => void
 }
 
 export const useContentStore = create<ContentState>((set, get) => ({
-  aiChapters: {},
-  generatingChapterId: null,
+  levels: {},
+  generatingLevelNumbers: [],
 
-  loadAiChapters: async () => {
-    await ensureAiChaptersLoaded()
-    const aiChapters = getLoadedAiChapters()
-    set({ aiChapters })
-    maybeBootstrapFirstChapter(get, aiChapters)
+  loadLevels: async () => {
+    await ensureLevelsLoaded()
+    const levels = getLoadedLevels()
+    set({ levels })
+    maybeBootstrapFirstLevel(get, levels)
   },
 
-  refreshAndMaybeBootstrap: async () => {
-    await refreshAiChapters()
-    const aiChapters = getLoadedAiChapters()
-    set({ aiChapters })
-    maybeBootstrapFirstChapter(get, aiChapters)
+  refreshAndEnsureAhead: async (currentLevelNumber) => {
+    await refreshLevels()
+    const levels = getLoadedLevels()
+    set({ levels })
+    if (currentLevelNumber) get().ensureLevelsAhead(currentLevelNumber)
+    else maybeBootstrapFirstLevel(get, levels)
   },
 
-  generateNewChapter: async () => {
-    if (get().generatingChapterId) return { ok: false, message: '已經有一個章節正在生成中' }
-    set({ generatingChapterId: GENERATING_NEW_CHAPTER })
-    const result = await requestNewChapterGeneration()
-    if (!result.ok) {
-      set({ generatingChapterId: null })
-      return { ok: false, message: result.message }
-    }
+  generateLevel: async (levelNumber) => {
+    if (get().generatingLevelNumbers.includes(levelNumber)) return { ok: false, message: '這一關正在生成中' }
+    set((s) => ({ generatingLevelNumbers: [...s.generatingLevelNumbers, levelNumber] }))
+    const result = await requestLevelGeneration(levelNumber)
+    set((s) => ({ generatingLevelNumbers: s.generatingLevelNumbers.filter((n) => n !== levelNumber) }))
+    if (!result.ok) return { ok: false, message: result.message }
+    // The level's own categories were just written to `aiCategories` server-side
+    // — refresh this session's cache of it so createGame() can resolve them the
+    // moment the player opens it, without needing a page reload first.
     await refreshAiContent()
-    set((s) => ({ aiChapters: { ...s.aiChapters, [result.chapterId]: result.entry }, generatingChapterId: null }))
-    return { ok: true, chapterId: result.chapterId }
+    set((s) => ({ levels: { ...s.levels, [levelNumber]: result.config } }))
+    return { ok: true }
   },
 
-  ensureNextChapterGenerating: (chapterId) => {
-    if (get().generatingChapterId) return
-    const extraLevels = Object.values(get().aiChapters).flatMap((e) => e.levels)
-    const contentOrder = getContentChapterOrder(extraLevels)
-    if (contentOrder[contentOrder.length - 1] !== chapterId) return // not the newest chapter with content
-    void get().generateNewChapter()
+  ensureLevelsAhead: (currentLevelNumber) => {
+    const { levels, generatingLevelNumbers } = get()
+    for (let n = currentLevelNumber + 1; n <= currentLevelNumber + AHEAD_BUFFER; n++) {
+      if (!levels[n] && !generatingLevelNumbers.includes(n)) void get().generateLevel(n)
+    }
   },
 }))
 
-/** Bootstrap: a brand-new install (or a freshly wiped database) has no chapters
- * at all yet — nothing would ever call ensureNextChapterGenerating in that state
- * (it only fires from starting a level, and there's no level to start), so kick
- * off the very first chapter here instead. Gated on hasAnyChapterEverBeenRequested(),
- * not just aiChapters being empty — a chapter still `status: 'generating'` (from
- * this or another session) is invisible to aiChapters until it's ready, and
- * without this check, reloading the page while chapter 1 is still generating
+/** Bootstrap: a brand-new install (or a freshly wiped database) has no levels at
+ * all yet — kick off generating level 1 (and the usual ahead-buffer) right away.
+ * Gated on hasAnyLevelEverBeenRequested(), not just levels being empty — a level
+ * still `status: 'generating'` is invisible to `levels` until it's ready, and
+ * without this check, reloading the page while level 1 is still generating
  * looked identical to "nothing has ever been requested" and fired a duplicate,
- * separately billed generation — confirmed happening in testing. */
-function maybeBootstrapFirstChapter(get: () => ContentState, aiChapters: Record<string, AiChapterEntry>): void {
-  if (Object.keys(aiChapters).length === 0 && !hasAnyChapterEverBeenRequested() && !get().generatingChapterId) {
-    void get().generateNewChapter()
+ * separately billed generation — confirmed happening in testing (see git history
+ * on the equivalent aiChapters.ts check this replaced). */
+function maybeBootstrapFirstLevel(get: () => ContentState, levels: Record<number, LevelConfig>): void {
+  if (Object.keys(levels).length === 0 && !hasAnyLevelEverBeenRequested()) {
+    get().ensureLevelsAhead(0)
   }
 }

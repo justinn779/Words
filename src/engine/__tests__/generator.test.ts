@@ -7,7 +7,6 @@ import { solve } from '../solver'
 
 const base: LevelConfigWithoutSeed = {
   id: 'gen-test',
-  chapterId: 'test',
   difficulty: 'easy',
   categoryIds: ['fruit', 'animal', 'color'],
   columnCount: 4,

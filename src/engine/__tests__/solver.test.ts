@@ -21,7 +21,6 @@ function testLevelBase(id: string): LevelConfigWithoutSeed {
   const categoryWordCounts = Object.fromEntries(TEST_CATEGORY_IDS.map((c) => [c, TEST_WORDS_PER_CATEGORY]))
   return {
     id,
-    chapterId: 'test',
     difficulty: 'easy',
     categoryIds: TEST_CATEGORY_IDS,
     columnCount: 4,

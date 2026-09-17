@@ -1,7 +1,7 @@
 import { usePlayerStore } from '../store/playerStore'
 
 interface HomeProps {
-  onOpenChapters: () => void
+  onOpenLevels: () => void
   onOpenDaily: () => void
   onOpenMissions: () => void
   onOpenAchievements: () => void
@@ -17,7 +17,7 @@ const AUTH_SHORT_LABEL: Record<string, string> = {
   google: 'Google 玩家',
 }
 
-export default function Home({ onOpenChapters, onOpenDaily, onOpenMissions, onOpenAchievements, onOpenSettings }: HomeProps) {
+export default function Home({ onOpenLevels, onOpenDaily, onOpenMissions, onOpenAchievements, onOpenSettings }: HomeProps) {
   const coins = usePlayerStore((s) => s.coins)
   const authStatus = usePlayerStore((s) => s.authStatus)
   const displayName = usePlayerStore((s) => s.displayName)
@@ -40,13 +40,13 @@ export default function Home({ onOpenChapters, onOpenDaily, onOpenMissions, onOp
       </div>
       <div className="home-main">
         <div className="home-book">
-          <div className="home-book-cover" onClick={onOpenChapters} role="button" tabIndex={0}>
+          <div className="home-book-cover" onClick={onOpenLevels} role="button" tabIndex={0}>
             <span className="home-title">文字接龍</span>
             <span className="home-subtitle">Word Solitaire</span>
             <span className="home-book-icon">📖</span>
           </div>
         </div>
-        <button type="button" className="home-primary" onClick={onOpenChapters}>
+        <button type="button" className="home-primary" onClick={onOpenLevels}>
           繼續閱讀
         </button>
         <div className="home-menu">

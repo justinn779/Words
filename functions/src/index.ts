@@ -26,7 +26,7 @@ import { generateSolvableLevel, type LevelConfigWithoutSeed } from '../../src/en
 import { createRng, shuffle } from '../../src/engine/rng'
 import { SEED } from '../../src/data/seed'
 import { DIFFICULTY_SHAPE, varyWordCounts, totalCardCount, estimateTargets, computeDeckSize } from '../../src/data/difficultyShapes'
-import { generateCategories, generateNewChapterContent, reviewCategories, type GeneratedCategory } from './openai'
+import { generateCategories, reviewCategories, type GeneratedCategory } from './openai'
 
 initializeApp()
 
@@ -38,7 +38,7 @@ const TELEGRAM_CHAT_ID = defineSecret('TELEGRAM_CHAT_ID')
 //
 // A handful of events worth knowing about right away rather than digging through
 // logs for: a player flags a level as unsolvable (reportUnsolvableLevel below), AI
-// chapter generation starting/finishing/failing, and a player actually registering
+// level generation starting/finishing/failing, and a player actually registering
 // (linking a persistent account, not every anonymous first-visit). Any function
 // that calls notifyDeveloper must list TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID in its
 // own `secrets` array — v2 only injects a secret into functions that declare it.
@@ -106,7 +106,6 @@ function verifySolvable(cat: GeneratedCategory): { solvable: boolean; moveCount?
   const { category, words } = toEngineShape(cat)
   const base: Omit<LevelConfig, 'seed'> = {
     id: `ai-check-${cat.categoryId}`,
-    chapterId: 'ai-check',
     difficulty: 'easy',
     categoryIds: [cat.categoryId],
     columnCount: 4,
@@ -151,9 +150,9 @@ async function existingWords(): Promise<Set<string>> {
 
 /** Full content (not just ids) for every category already in the shared pool —
  * built-in SEED plus every previously accepted AI category — the raw material
- * fillShortfallFromExistingPool draws from. A category recurring across chapters
- * this way is no different from a SEED category already appearing in multiple
- * hand-authored chapters today. */
+ * fillShortfallFromExistingPool draws from. A category recurring across
+ * levels this way is no different from a SEED category already appearing in
+ * multiple hand-authored levels today. */
 async function existingCategoriesFull(): Promise<GeneratedCategory[]> {
   const db = getFirestore()
   const snap = await db.collection(AI_CATEGORIES_COLLECTION).get()
@@ -164,7 +163,7 @@ async function existingCategoriesFull(): Promise<GeneratedCategory[]> {
   return [...SEED.map((row) => ({ categoryId: row.categoryId, name: row.name, words: row.words })), ...fromAi]
 }
 
-/** The guarantee that chapter generation never simply gives up: if `accepted`
+/** The guarantee that level generation never simply gives up: if `accepted`
  * (whatever OpenAI produced and passed verification) falls short of
  * `minAccepted`, tops it up with categories already known-good — built-in SEED
  * plus previously accepted AI content — until the target is met or the whole
@@ -175,9 +174,9 @@ async function existingCategoriesFull(): Promise<GeneratedCategory[]> {
  * new portion of the return value gets persisted. */
 async function fillShortfallFromExistingPool(
   accepted: VerifiedCategory[],
-  /** categoryIds already picked for THIS chapter's own pool (just `accepted`'s
+  /** categoryIds already picked for THIS level's own pool (just `accepted`'s
    * own ids) — deliberately not the whole game's existingCategoryIds(), since
-   * reusing a category that's already in some OTHER chapter is completely fine
+   * reusing a category that's already in some OTHER level is completely fine
    * (see existingCategoriesFull's comment) and excluding all of them would empty
    * out the very pool this function exists to draw from. */
   usedIds: Set<string>,
@@ -204,9 +203,9 @@ async function fillShortfallFromExistingPool(
  * out of an already-fetched batch. Does not touch Firestore — see
  * persistAcceptedCategories. The verification core shared by both
  * verifyCategoryCandidates (fetches from OpenAI itself) and
- * generateNewChapterNow (which fetches candidates bundled with a chapter
- * theme in one call, via generateNewChapterContent). Mutates neither input set —
- * callers doing multiple rounds (the retry loop in generateNewChapterNow) add
+ * generateLevelNow (which uses the same category-generation pipeline for a
+ * single level's categories). Mutates neither input set — callers doing
+ * multiple rounds (the top-up retry loop in generateLevelNow) add
  * newly-accepted ids/words to their own copies. */
 function verifyCategoryCandidatesFrom(
   candidates: GeneratedCategory[],
@@ -248,16 +247,14 @@ function verifyCategoryCandidatesFrom(
 
 /** Asks OpenAI for `count` new categories and keeps only the ones that are
  * well-formed AND solver-verified. Does not touch Firestore — see
- * persistAcceptedCategories. Shared by the plain category top-up and the
- * chapter-generation pipeline below (which passes a `theme` hint). */
+ * persistAcceptedCategories. */
 async function verifyCategoryCandidates(
   apiKey: string,
   existingIds: string[],
   existingWordSet: Set<string>,
   count: number,
-  theme?: string,
 ): Promise<{ accepted: VerifiedCategory[]; rejected: { categoryId: string; reason: string }[] }> {
-  const candidates = await generateCategories(apiKey, existingIds, count, theme)
+  const candidates = await generateCategories(apiKey, existingIds, count)
   return verifyCategoryCandidatesFrom(candidates, existingIds, existingWordSet)
 }
 
@@ -349,59 +346,58 @@ export const generateAiCategoriesNow = onCall({ secrets: [OPENAI_API_KEY] }, asy
   return summary
 })
 
-// --- Chapter generation ----------------------------------------------------------
+// --- Level generation --------------------------------------------------------------
 //
-// Every chapter is generated on demand now — there is no fixed roster or
-// hand-authored content (src/data/levels.ts and the old chapters.ts roster are
-// gone). generateNewChapterNow below invents each chapter's theme + categories,
-// built into a real difficulty curve, run through the exact same solver-verified
-// pipeline every level in the game always has (see buildChapterLevels below), and
-// stored in the public, read-only `aiChapters/{chapterId}` collection so every
-// later player who reaches that chapter reuses it instead of regenerating.
+// Every level is generated on demand and completely independently — there is no
+// chapter grouping, fixed roster, or hand-authored content anymore (src/data/
+// levels.ts and the old chapters.ts roster are gone). generateLevelNow below
+// picks a level's categories with no unifying theme required (deliberately —
+// putting stationery + outer space + fantasy creatures + Korean culture all in
+// one level is fine, even encouraged, per explicit product direction), and
+// stores the result in the public, read-only `levels/{levelNumber}` collection.
 //
-// An earlier version asked OpenAI for categories under a narrow per-chapter topic
-// hint. In production that narrow a vocabulary collided with itself and with
-// existing categories often enough that a chapter could fall short of the
-// categories a 'hard' level needs and give up entirely — a player reaching that
-// chapter just saw it stuck. Two changes fix that: no topic hint on the category
-// ask itself (a wide-open ask, same shape as dailyAiCategoryRefresh/
-// generateAiCategoriesNow's top-up, is far less collision-prone, and matches how
-// Daily Challenge mixes categories freely rather than sticking to one topic), and
-// fillShortfallFromExistingPool below, which guarantees a chapter is never
-// short — generation now literally cannot fail to produce a playable chapter.
+// An earlier version generated levels in themed 5-level batches (a "chapter"),
+// asking OpenAI for categories under a narrow shared topic hint. In production
+// that narrow a vocabulary collided with itself and with existing categories
+// often enough that a batch could fall short of the categories a 'hard' level
+// needs and give up entirely — a player reaching it just saw it stuck. This
+// version fixes that at the root by not having a topic to conform to at all
+// (a wide-open ask, same shape as dailyAiCategoryRefresh/generateAiCategoriesNow's
+// top-up, is far less collision-prone), and fillShortfallFromExistingPool below
+// still guarantees a level is never short even so — generation cannot fail to
+// produce a playable level.
 
-const AI_CHAPTERS_COLLECTION = 'aiChapters'
-
-/** One level per difficulty step — a reasonable single-chapter size that also
- * matches CHAPTER_CATEGORY_POOL_TARGET. */
-const CHAPTER_LEVEL_CURVE: Difficulty[] = ['easy', 'easy', 'normal', 'normal', 'hard']
+const LEVELS_COLLECTION = 'levels'
 /** Asked for up front, with room to spare over DIFFICULTY_SHAPE.hard.categoryCount
  * (the largest single ask, currently 15) — OpenAI doesn't always keep to the
- * excluded-id/title list perfectly, and the more chapters exist the likelier a
- * given attempt collides with one of them (see MAX_TOPUP_ATTEMPTS below). */
-const CHAPTER_CATEGORY_POOL_TARGET = 20
-/** How many extra top-up rounds to try if the first batch doesn't clear
- * DIFFICULTY_SHAPE.hard.categoryCount once duplicates/rejects are filtered out —
- * each round asks for just the shortfall (+ a small buffer), excluding every id
- * seen so far, including this chapter's own already-accepted ones. Confirmed
- * necessary in production: as more chapters accumulate, OpenAI increasingly
- * resuggests an existing categoryId or a near-duplicate theme despite being told
- * the exclusion list, and a single failed attempt was aborting generation
- * outright even though a retry routinely succeeds. */
+ * excluded-id list perfectly, and the more categories exist the likelier a given
+ * attempt collides with one of them (see MAX_TOPUP_ATTEMPTS below). */
+const CATEGORY_REQUEST_TARGET = 20
+/** How many extra top-up rounds to try if the first batch doesn't clear this
+ * level's DIFFICULTY_SHAPE categoryCount once duplicates/rejects are filtered
+ * out — each round asks for just the shortfall (+ a small buffer), excluding
+ * every id seen so far, including this level's own already-accepted ones.
+ * Confirmed necessary in production: as more categories accumulate, OpenAI
+ * increasingly resuggests an existing categoryId despite being told the
+ * exclusion list, and a single failed attempt was aborting generation outright
+ * even though a retry routinely succeeds. */
 const MAX_TOPUP_ATTEMPTS = 4
 const CATEGORY_REQUEST_BUFFER = 5
+/** How many of the immediately preceding levels' categories get passed to the
+ * prompt as a soft "avoid repeating this vibe" hint (see openai.ts's
+ * buildPrompt) — distinct from the hard categoryId/word-uniqueness check every
+ * candidate goes through regardless of this. */
+const RECENT_LEVELS_TO_AVOID = 10
 
-function buildChapterLevelBase(
-  chapterId: string,
+function buildLevelBase(
+  levelNumber: number,
   difficulty: Difficulty,
-  index: number,
   categoryIds: string[],
   categoryWordCounts: Record<string, number>,
 ): LevelConfigWithoutSeed {
   const shape = DIFFICULTY_SHAPE[difficulty]
   return {
-    id: `${chapterId}-${String(index + 1).padStart(2, '0')}`,
-    chapterId,
+    id: levelDocId(levelNumber),
     difficulty,
     categoryIds,
     columnCount: shape.columnCount,
@@ -416,103 +412,95 @@ function buildChapterLevelBase(
   }
 }
 
-/** Mirrors scripts/generate-levels.ts's old generateChapter, but over a freshly
- * AI-generated category pool instead of the static built-in CATEGORIES/WORDS.
- *
- * No solver verification here anymore, on purpose: a level's stored config now
- * only fixes its card *pool* (categoryIds/categoryWordCounts) — the actual deal
- * (which cards land in the deck vs. which column, in what order) is randomized
- * fresh every time a player enters or replays it (see src/engine/deal.ts's
- * dealUntilLikelyWinnable, the client's `seed` override). Pre-verifying one
- * specific seed at generation time was both expensive (this is exactly what
- * made chapter generation risk the 300s Cloud Function timeout) and pointless
- * under that model, since the stored seed is never actually used to deal a
- * board — see difficultyShapes.ts's history for the timeout story this replaces. */
-function buildChapterLevels(chapterId: string, pool: Category[]): { levels: LevelConfig[] } {
-  const rng = createRng(`chapter-levels-${chapterId}`)
-  const poolIds = pool.map((c) => c.id)
-  const levels: LevelConfig[] = []
-
-  CHAPTER_LEVEL_CURVE.forEach((difficulty, index) => {
-    const shape = DIFFICULTY_SHAPE[difficulty]
-    const categoryCount = Math.min(shape.categoryCount, poolIds.length)
-    const categoryIds = shuffle(poolIds, rng).slice(0, categoryCount)
-    const categoryWordCounts = varyWordCounts(rng, difficulty, categoryIds)
-    const base = buildChapterLevelBase(chapterId, difficulty, index, categoryIds, categoryWordCounts)
-    const targets = estimateTargets(totalCardCount(categoryWordCounts))
-    levels.push({ ...base, ...targets, seed: `${base.id}-s0` })
-  })
-
-  return { levels }
+function levelDocId(levelNumber: number): string {
+  return `level-${levelNumber}`
 }
 
-// generateNewChapterNow reserves the next sequential chapter "order" via a
-// Firestore counter (meta/chapterCounter — see firestore.rules for why clients
-// can't touch it directly), asks OpenAI for a fresh theme and the categories to
-// match, then runs the verify -> build -> store pipeline below. Chapter ids are
-// named `ai-chapter-{order}`; src/data/progression.ts's getContentChapterOrder
-// sorts these by that numeric order.
+/** Level numbers are 1-based; difficulty repeats in a fixed 3-level cycle
+ * (1=easy, 2=normal, 3=hard, 4=easy, ...) — mirrors src/data/progression.ts's
+ * getDifficultyForLevel (duplicated rather than imported since that module
+ * also pulls in client-only types; this is intentionally the one place the
+ * rule is allowed to drift, and it's a single line to keep in sync). */
+function difficultyForLevel(levelNumber: number): Difficulty {
+  const cycle: Difficulty[] = ['easy', 'normal', 'hard']
+  return cycle[(levelNumber - 1) % cycle.length]
+}
 
-const CHAPTER_COUNTER_DOC = 'meta/chapterCounter'
-/** No fixed roster anymore — chapter numbering starts at 1. */
-const FIRST_DYNAMIC_CHAPTER_ORDER = 1
-
-/** All chapter titles/themes already in use, static or generated — asked of
- * OpenAI so it doesn't invent a theme that duplicates one that already exists. */
-async function existingChapterTitles(): Promise<string[]> {
+/** Category NAMES used across the RECENT_LEVELS_TO_AVOID levels immediately
+ * before `levelNumber` — see openai.ts's buildPrompt for how this gets used. */
+async function recentCategoryNames(levelNumber: number): Promise<string[]> {
   const db = getFirestore()
-  const snap = await db.collection(AI_CHAPTERS_COLLECTION).where('status', '==', 'ready').select('title').get()
-  return snap.docs.map((d) => d.data().title as string | undefined).filter((t): t is string => Boolean(t))
+  const from = Math.max(1, levelNumber - RECENT_LEVELS_TO_AVOID)
+  if (from >= levelNumber) return []
+  const refs = Array.from({ length: levelNumber - from }, (_, i) => db.collection(LEVELS_COLLECTION).doc(levelDocId(from + i)))
+  const snaps = await db.getAll(...refs)
+  const ids = new Set<string>()
+  for (const snap of snaps) {
+    const data = snap.data() as { status?: string; config?: LevelConfig } | undefined
+    if (data?.status === 'ready') for (const id of data.config?.categoryIds ?? []) ids.add(id)
+  }
+  if (ids.size === 0) return []
+  const pool = await existingCategoriesFull()
+  const nameById = new Map(pool.map((c) => [c.categoryId, c.name]))
+  return [...ids].map((id) => nameById.get(id) ?? id)
 }
 
-export const generateNewChapterNow = onCall(
+/** How long a 'generating' lock is honored before a retry is allowed to just take
+ * over — covers a crashed/killed previous attempt rather than wedging the level
+ * forever. Not a true distributed lock (a rare double-generate under this window
+ * just wastes an OpenAI call, never corrupts anything — last writer wins on the
+ * same idempotent doc), which is an acceptable trade for how rarely this fires. */
+const GENERATING_LOCK_TIMEOUT_MS = 3 * 60 * 1000
+
+/** Callable (see src/firebase/levels.ts for the client side) that generates a
+ * single, specific level number on demand — the client's ahead-buffer
+ * (src/store/contentStore.ts) calls this for whichever of the next few levels
+ * don't exist yet. Reuses whatever's already stored if another player (or an
+ * earlier, slower request) already generated this level number — every player
+ * sees the same level once it exists, same principle as Daily Challenge's
+ * shared-seed determinism, just generated once instead of computed. */
+export const generateLevelNow = onCall(
   { secrets: [OPENAI_API_KEY, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID], timeoutSeconds: 300, memory: '1GiB' },
   async (request) => {
     if (!request.auth) {
       throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before requesting new content.')
     }
+    const levelNumber = Number(request.data?.levelNumber)
+    if (!Number.isInteger(levelNumber) || levelNumber < 1) {
+      throw new HttpsError('invalid-argument', `Invalid levelNumber "${request.data?.levelNumber}"`)
+    }
 
     const db = getFirestore()
-    // Atomically reserve the next order number so two players finishing the last
-    // chapter at nearly the same moment don't generate two competing chapters.
-    const order = await db.runTransaction(async (tx) => {
-      const counterRef = db.doc(CHAPTER_COUNTER_DOC)
-      const snap = await tx.get(counterRef)
-      const next = snap.exists ? (snap.data()!.nextOrder as number) : FIRST_DYNAMIC_CHAPTER_ORDER
-      tx.set(counterRef, { nextOrder: next + 1 }, { merge: true })
-      return next
-    })
-    const chapterId = `ai-chapter-${order}`
-    const chapterRef = db.collection(AI_CHAPTERS_COLLECTION).doc(chapterId)
+    const levelRef = db.collection(LEVELS_COLLECTION).doc(levelDocId(levelNumber))
+    const existingSnap = await levelRef.get()
+    if (existingSnap.exists) {
+      const data = existingSnap.data() as { status?: string; config?: LevelConfig; startedAt?: FirebaseFirestore.Timestamp }
+      if (data.status === 'ready' && data.config) {
+        logger.info('generateLevelNow reused existing level', { levelNumber, uid: request.auth.uid })
+        return { levelNumber, config: data.config, reused: true }
+      }
+      if (data.status === 'generating' && Date.now() - (data.startedAt?.toMillis() ?? 0) < GENERATING_LOCK_TIMEOUT_MS) {
+        throw new HttpsError('already-exists', 'This level is already being generated — try again shortly.')
+      }
+    }
 
-    await chapterRef.set({ status: 'generating', order, startedAt: FieldValue.serverTimestamp() })
-    await notifyDeveloper(`[文字接龍] 開始生成全新章節\n預計序號：${order}`)
+    await levelRef.set({ status: 'generating', startedAt: FieldValue.serverTimestamp() })
+    await notifyDeveloper(`[文字接龍] 開始生成第 ${levelNumber} 關`)
 
     try {
+      const difficulty = difficultyForLevel(levelNumber)
+      const shape = DIFFICULTY_SHAPE[difficulty]
       const existingIds = await existingCategoryIds()
       const existingWordSet = await existingWords()
+      const avoidThemes = await recentCategoryNames(levelNumber)
 
-      // A brand-new chapter's title only makes sense if OpenAI actually invents
-      // one — but everything downstream of it (the categories) still has the same
-      // guarantee as generateNextChapterNow: any failure anywhere in this
-      // AI-dependent chain (theme invention, top-up rounds, review) is not fatal —
-      // it just leaves chapterTitle unset and accepted empty, and
-      // fillShortfallFromExistingPool below fills the whole chapter from the
-      // existing pool. getChapterDisplayTitle (src/data/progression.ts) already
-      // renders a chapter with no AI title as a plain "第N章", so this degrades
-      // gracefully rather than leaving the chapter stuck.
-      let chapterTitle: string | undefined
       let accepted: VerifiedCategory[] = []
       let rejected: { categoryId: string; reason: string }[] = []
       try {
-        const existingTitles = await existingChapterTitles()
-        const seed = await generateNewChapterContent(OPENAI_API_KEY.value(), existingIds, existingTitles, CHAPTER_CATEGORY_POOL_TARGET)
-        chapterTitle = seed.chapterTitle
-        logger.info('generateNewChapterNow theme', { chapterId, order, chapterTitle })
-
         const excludedIds = new Set(existingIds)
         const excludedWords = new Set(existingWordSet)
-        const initial = verifyCategoryCandidatesFrom(seed.categories, [...excludedIds], excludedWords)
+        const candidates = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], CATEGORY_REQUEST_TARGET, avoidThemes)
+        const initial = verifyCategoryCandidatesFrom(candidates, [...excludedIds], excludedWords)
         accepted = initial.accepted
         rejected = initial.rejected
         for (const cat of accepted) {
@@ -520,11 +508,9 @@ export const generateNewChapterNow = onCall(
           for (const w of cat.words) excludedWords.add(w)
         }
 
-        // The theme is only invented once (above) — these top-up rounds ask for
-        // more categories under that SAME theme, they don't re-invent a new one.
-        for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < DIFFICULTY_SHAPE.hard.categoryCount; attempt++) {
-          const count = DIFFICULTY_SHAPE.hard.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
-          const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, chapterTitle)
+        for (let attempt = 0; attempt < MAX_TOPUP_ATTEMPTS && accepted.length < shape.categoryCount; attempt++) {
+          const count = shape.categoryCount - accepted.length + CATEGORY_REQUEST_BUFFER
+          const more = await generateCategories(OPENAI_API_KEY.value(), [...excludedIds], count, avoidThemes)
           const verified = verifyCategoryCandidatesFrom(more, [...excludedIds], excludedWords)
           for (const cat of verified.accepted) {
             excludedIds.add(cat.categoryId)
@@ -538,59 +524,51 @@ export const generateNewChapterNow = onCall(
         accepted = review.kept
         rejected = [...rejected, ...review.rejected]
       } catch (err) {
-        logger.warn('generateNewChapterNow: AI theme/category generation failed, falling back to the existing pool with a generic title', {
-          chapterId,
-          order,
+        // OpenAI itself unreachable/malformed — not fatal, fillShortfallFromExistingPool
+        // below fills the whole level from the existing pool instead.
+        logger.warn('generateLevelNow: AI category generation failed, falling back to existing pool', {
+          levelNumber,
           error: String(err),
         })
-        chapterTitle = undefined
-        accepted = []
-        rejected = []
       }
-      logger.info('generateNewChapterNow category candidates', { chapterId, acceptedCount: accepted.length, rejected })
+      logger.info('generateLevelNow category candidates', { levelNumber, acceptedCount: accepted.length, rejected })
 
       await persistAcceptedCategories(accepted)
 
-      // Same guarantee as generateNextChapterNow — if this new theme didn't yield
-      // enough verified categories of its own, top up from the existing pool
-      // rather than leaving the chapter stuck. The chapter still gets its own
-      // freshly-invented title even when some of its categories end up being
-      // familiar ones.
-      const filled = await fillShortfallFromExistingPool(
-        accepted,
-        new Set(accepted.map((c) => c.categoryId)),
-        DIFFICULTY_SHAPE.hard.categoryCount,
-      )
+      const filled = await fillShortfallFromExistingPool(accepted, new Set(accepted.map((c) => c.categoryId)), shape.categoryCount)
       if (filled.length > accepted.length) {
-        logger.info('generateNewChapterNow topped up shortfall from existing pool', {
-          chapterId,
+        logger.info('generateLevelNow topped up shortfall from existing pool', {
+          levelNumber,
           newlyGenerated: accepted.length,
           filledFromPool: filled.length - accepted.length,
         })
       }
 
-      const pool: Category[] = filled.map((cat) => toEngineShape(cat).category)
-      const { levels } = buildChapterLevels(chapterId, pool)
+      const rng = createRng(`level-${levelNumber}`)
+      // fillShortfallFromExistingPool only guarantees >= shape.categoryCount, not
+      // exactly — a generous OpenAI batch can overshoot, so trim back down.
+      const categoryIds = shuffle(filled.map((c) => c.categoryId), rng).slice(0, shape.categoryCount)
+      const categoryWordCounts = varyWordCounts(rng, difficulty, categoryIds)
+      const base = buildLevelBase(levelNumber, difficulty, categoryIds, categoryWordCounts)
+      const targets = estimateTargets(totalCardCount(categoryWordCounts))
+      // No solver verification here, on purpose: this config only fixes the
+      // level's card *pool* — the actual deal (deck vs. column placement,
+      // ordering) is randomized fresh every time a player enters or replays it
+      // (see src/engine/deal.ts's dealUntilLikelyWinnable, which ignores this
+      // `seed`). Pre-verifying one specific seed at generation time was both
+      // expensive (this is exactly what once made generation risk the 300s
+      // Cloud Function timeout) and pointless under that model.
+      const config: LevelConfig = { ...base, ...targets, seed: `${base.id}-s0` }
 
-      // Firestore rejects an explicit `undefined` field value outright — omit
-      // `title` entirely on the no-AI-theme fallback path rather than write one.
-      await chapterRef.set({
-        status: 'ready',
-        ...(chapterTitle ? { title: chapterTitle } : {}),
-        order,
-        levels,
-        readyAt: FieldValue.serverTimestamp(),
-      })
-      logger.info('generateNewChapterNow done', { chapterId, order, uid: request.auth.uid, levelCount: levels.length })
-      await notifyDeveloper(
-        `[文字接龍] 全新章節生成成功\n章節：${chapterId}\n標題：${chapterTitle ?? '（無，使用預設章節標題）'}\n關卡數：${levels.length}`,
-      )
-      return { chapterId, title: chapterTitle, order, levels }
+      await levelRef.set({ status: 'ready', config, readyAt: FieldValue.serverTimestamp() })
+      logger.info('generateLevelNow done', { levelNumber, uid: request.auth.uid, difficulty })
+      await notifyDeveloper(`[文字接龍] 第 ${levelNumber} 關生成成功\n難度：${difficulty}`)
+      return { levelNumber, config, reused: false }
     } catch (err) {
-      await chapterRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() }, { merge: true })
-      logger.error('generateNewChapterNow failed', { chapterId, error: String(err) })
-      await notifyDeveloper(`[文字接龍] 全新章節生成失敗\n章節：${chapterId}\n錯誤：${String(err)}`)
-      throw new HttpsError('internal', `Chapter generation failed: ${String(err)}`)
+      await levelRef.set({ status: 'failed', error: String(err), failedAt: FieldValue.serverTimestamp() })
+      logger.error('generateLevelNow failed', { levelNumber, error: String(err) })
+      await notifyDeveloper(`[文字接龍] 第 ${levelNumber} 關生成失敗\n錯誤：${String(err)}`)
+      throw new HttpsError('internal', `Level generation failed: ${String(err)}`)
     }
   },
 )
@@ -625,10 +603,9 @@ export const reportUnsolvableLevel = onCall(
       throw new HttpsError('unauthenticated', 'Sign in (even anonymously) before reporting a level.')
     }
     const levelId = String(request.data?.levelId ?? '')
-    const chapterId = String(request.data?.chapterId ?? '')
     const difficulty = String(request.data?.difficulty ?? '')
-    if (!REPORT_ID_RE.test(levelId) || !REPORT_ID_RE.test(chapterId)) {
-      throw new HttpsError('invalid-argument', 'Missing or malformed levelId/chapterId')
+    if (!REPORT_ID_RE.test(levelId)) {
+      throw new HttpsError('invalid-argument', 'Missing or malformed levelId')
     }
 
     const db = getFirestore()
@@ -640,7 +617,6 @@ export const reportUnsolvableLevel = onCall(
       tx.set(
         flagRef,
         {
-          chapterId,
           difficulty,
           resolved: false,
           reportCount: (alreadyOpen ? (data?.reportCount ?? 0) : 0) + 1,
@@ -653,11 +629,11 @@ export const reportUnsolvableLevel = onCall(
     })
 
     if (shouldNotify) {
-      const text = `[文字接龍] 玩家回報可能無解的關卡\n章節：${chapterId}\n關卡：${levelId}\n難度：${difficulty}`
+      const text = `[文字接龍] 玩家回報可能無解的關卡\n關卡：${levelId}\n難度：${difficulty}`
       await notifyDeveloper(text)
     }
 
-    logger.info('reportUnsolvableLevel recorded', { levelId, chapterId, difficulty, uid: request.auth.uid, notified: shouldNotify })
+    logger.info('reportUnsolvableLevel recorded', { levelId, difficulty, uid: request.auth.uid, notified: shouldNotify })
     return { ok: true }
   },
 )

@@ -50,7 +50,6 @@ describe('isLikelyWinnable', () => {
   // -> passes only when BOTH are unburied.
   const config: LevelConfig = {
     id: 'test',
-    chapterId: 'test',
     difficulty: 'easy',
     categoryIds: ['a', 'b'],
     columnCount: 1,
@@ -77,7 +76,6 @@ describe('isLikelyWinnable', () => {
 describe('dealUntilLikelyWinnable', () => {
   const level: LevelConfig = {
     id: 'test-deal',
-    chapterId: 'test',
     difficulty: 'easy',
     categoryIds: ['fruit', 'animal', 'instrument'],
     columnCount: 3,

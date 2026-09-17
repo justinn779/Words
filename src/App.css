@@ -181,14 +181,12 @@
   padding: 6px 8px;
 }
 
-.chapter-list,
 .level-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.chapter-item,
 .level-item {
   width: 100%;
   display: flex;
@@ -204,41 +202,80 @@
   text-align: left;
 }
 
-.chapter-title,
 .level-number {
   font-weight: 600;
 }
 
-.chapter-stars,
 .level-stars {
   color: var(--accent);
 }
 
-/* The locked-chapter reason ("需先取得前一章一半星星") is long enough to wrap
-   on a narrow phone screen — letting the row wrap (rather than forcing both
-   children onto one line) keeps it a clean second line under the title
-   instead of interleaving with it mid-word. */
-.chapter-locked {
-  flex-basis: 100%;
-  text-align: right;
-  opacity: 0.5;
+/* ---------- Level grid (LevelGrid.tsx) ----------
+   Every level is independent now (no chapters) — a flat, endlessly-numbered
+   grid of square tiles instead of a chapter list + per-chapter level list.
+   Border color carries the difficulty (easy/normal/hard); stars underneath
+   carry progress, same information as the old row-based list just in a much
+   more scannable, compact shape at this scale. */
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
 }
 
-/* The next (not-yet-generated, id unknown until the server assigns one)
-   chapter — it auto-generates on its own (gameStore.ts's
-   ensureNextChapterGenerating) the moment the player starts a level in the
-   current frontier chapter, no button needed here. Distinct styling from
-   .chapter-locked (truly nothing to do yet) so this reads as "on its way". */
-.chapter-generatable {
+@media (min-width: 720px) {
+  .level-grid {
+    grid-template-columns: repeat(10, 1fr);
+  }
+}
+
+.level-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: var(--radius);
+  border: 3px solid var(--paper-deep);
+  background: var(--card-bg);
+  box-shadow: var(--shadow-soft);
+}
+
+.level-tile:disabled {
+  opacity: 0.55;
+}
+
+.level-tile-easy {
+  border-color: #4caf50;
+}
+
+.level-tile-normal {
+  border-color: #ff9800;
+}
+
+.level-tile-hard {
+  border-color: var(--danger);
+}
+
+.level-tile-number {
+  font-size: clamp(16px, 4vw, 22px);
+  font-weight: 700;
+}
+
+.level-tile-stars {
+  font-size: clamp(10px, 2.4vw, 13px);
+  color: var(--paper-deep);
+  letter-spacing: 1px;
+}
+
+.level-tile-stars .star-filled {
   color: var(--accent);
-  font-weight: 600;
 }
 
-/* Non-interactive trailing row (ChapterList's "下一章" status) — same shape as
-   a real chapter-item button but visibly not clickable. */
-.chapter-item-pending {
-  opacity: 0.75;
-  cursor: default;
+.level-tile-pending {
+  letter-spacing: normal;
+  opacity: 0.7;
 }
 
 .level-difficulty {

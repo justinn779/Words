@@ -21,19 +21,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // AI-generated chapters (functions/src/index.ts's generateNextChapterNow) —
-    // same public-read/Cloud-Functions-only-write shape as aiCategories above. A
-    // chapter's levels are only readable once solver-verified and fully written.
-    match /aiChapters/{chapterId} {
+    // AI-generated levels (functions/src/index.ts's generateLevelNow) — same
+    // public-read/Cloud-Functions-only-write shape as aiCategories above. A
+    // level is only readable once it's fully generated and written (status
+    // "ready" — see generateLevelNow).
+    match /levels/{levelId} {
       allow read: if request.auth != null;
       allow write: if false;
-    }
-
-    // Internal bookkeeping only (currently just meta/chapterCounter, the
-    // sequential-order reservation for generateNewChapterNow) — never read or
-    // written by any client, signed in or not.
-    match /meta/{docId} {
-      allow read, write: if false;
     }
 
     // "Report an unsolvable level" flags (functions/src/index.ts's

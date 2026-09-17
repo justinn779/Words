@@ -340,7 +340,6 @@ describe('undo', () => {
 describe('checkWin / calculateScore', () => {
   const config: LevelConfig = {
     id: 't',
-    chapterId: 'c',
     difficulty: 'easy',
     categoryIds: ['fruit', 'animal'],
     columnCount: 2,

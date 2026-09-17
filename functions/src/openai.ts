@@ -65,9 +65,18 @@ function parseGeneratedCategory(c: unknown, i: number): GeneratedCategory {
   }
 }
 
-function buildPrompt(existingCategoryIds: string[], count: number, theme?: string): string {
+/** `avoidThemes`: category names used in the last several levels (see index.ts's
+ * recentCategoryNames) — a soft "try a different vibe" nudge, distinct from the
+ * hard categoryId/word-uniqueness check every candidate already goes through
+ * regardless. There's no per-level theme to conform to anymore: every level's
+ * categories are picked completely independently, deliberately unrelated to
+ * each other is fine (e.g. stationery + outer space + fantasy creatures +
+ * Korean culture all in one level). */
+function buildPrompt(existingCategoryIds: string[], count: number, avoidThemes?: string[]): string {
   return `你是「文字接龍」這款繁體中文文字分類接龍遊戲的內容設計師。
-${theme ? `\n這批分類是為了新章節「${theme}」設計。這個主題底下要能同時容納好幾個彼此角度完全不同的分類——例如同一個主題若拆成「A的種類一」「A的種類二」這種只是範圍大小不同的分類，玩家會分不清一個詞該歸哪個，這樣不合格；分類之間應該像是這個主題的不同「面向」（例如器材 vs. 人物 vs. 場所 vs. 事件），彼此天生就不會混淆。\n` : ''}
+
+這一關的分類完全自由發揮，可以是任何主題，不需要圍繞單一主題──同一關裡出現好幾個完全不相關的分類也完全沒關係（例如文具、宇宙、幻想生物、韓國文化同時出現在同一關），這樣對玩家來說更有變化、更不容易覺得分類之間模稜兩可。
+${avoidThemes && avoidThemes.length > 0 ? `\n最近幾關已經出現過這些主題，這次請盡量避開，選點不一樣的方向：${avoidThemes.join('、')}\n` : ''}
 請設計 ${count} 個全新的詞語分類，每個分類需要：
 - categoryId：英文 slug（小寫字母、可用連字號，例如 "space-object"），不可與下列已存在的 ID 重複：${existingCategoryIds.join(', ') || '（無）'}
 - name：分類的繁體中文顯示名稱（例如「水果」「動物」），2-6 個字，要具體到玩家一看就知道範圍，不能是「特殊道具」「經典人物」這種模糊到什麼都能塞的名稱
@@ -90,54 +99,12 @@ export async function generateCategories(
   apiKey: string,
   existingCategoryIds: string[],
   count: number,
-  theme?: string,
+  avoidThemes?: string[],
 ): Promise<GeneratedCategory[]> {
-  const parsed = await callOpenAiJson(apiKey, buildPrompt(existingCategoryIds, count, theme))
+  const parsed = await callOpenAiJson(apiKey, buildPrompt(existingCategoryIds, count, avoidThemes))
   const categories = (parsed as { categories?: unknown }).categories
   if (!Array.isArray(categories)) throw new Error('OpenAI response missing a "categories" array')
   return categories.map(parseGeneratedCategory)
-}
-
-export interface GeneratedChapterContent {
-  chapterTitle: string
-  categories: GeneratedCategory[]
-}
-
-function buildNewChapterPrompt(existingCategoryIds: string[], existingChapterTitles: string[], count: number): string {
-  return `你是「文字接龍」這款繁體中文文字分類接龍遊戲的內容設計師。
-
-玩家已經破完所有現有章節，需要一個全新的章節主題。請先想一個範圍夠大的新主題（2-6 個字），大到底下能同時放進好幾個彼此角度完全不同的分類——參考等級是「日常生活」「自然世界」「飲食文化」「世界旅行」「藝術與娛樂」這種涵蓋很多面向的大主題，而不是「復古電玩」「懷舊遊戲」這種範圍太窄、底下的分類只能圍繞同一件事拆來拆去（拆出來的分類會長得很像、玩家分不出詞該歸哪個）的小眾主題。不可與下列已存在的章節主題重複或高度相似：${existingChapterTitles.join('、') || '（無）'}
-
-接著圍繞這個主題，設計 ${count} 個全新的詞語分類，每個分類要代表主題底下明顯不同的「面向」（例如器材 vs. 人物 vs. 場所 vs. 事件），而不是同一個小範圍拆成好幾份：
-- categoryId：英文 slug（小寫字母、可用連字號，例如 "space-object"），不可與下列已存在的 ID 重複：${existingCategoryIds.join(', ') || '（無）'}
-- name：分類的繁體中文顯示名稱（例如「水果」「動物」），2-6 個字，要具體到玩家一看就知道範圍，不能是「特殊道具」「經典人物」這種模糊到什麼都能塞的名稱
-- words：${WORDS_PER_CATEGORY} 個繁體中文詞語，每個詞語必須：
-  - 明確、毫無疑義地只屬於這一個分類（玩家看到這個詞不需要猜測分類，遊戲的挑戰在於排列卡片、不在於分類判斷）
-  - 讀者看到這個詞時，不會聯想到這批分類中的「另一個」分類——如果某個詞放進另一個分類也說得通，就不合格，換一個更專屬的詞
-  - 2-5 個中文字
-  - 彼此不重複
-  - 避免地域敏感、爭議性、或需要專業知識才懂的冷僻詞彙
-
-只回傳一個 JSON 物件，格式為 {"chapterTitle":"...","categories":[{"categoryId":"...","name":"...","words":["...", ...]}]}，不要有任何其他文字、解說或 markdown 標記。`
-}
-
-/** Like generateCategories, but for a brand-new chapter beyond the pre-named
- * placeholders (src/data/chapters.ts) — OpenAI invents both a short chapter
- * theme/title and the categories to go with it in one response, so the two stay
- * thematically consistent without two separate round trips. */
-export async function generateNewChapterContent(
-  apiKey: string,
-  existingCategoryIds: string[],
-  existingChapterTitles: string[],
-  count: number,
-): Promise<GeneratedChapterContent> {
-  const parsed = await callOpenAiJson(apiKey, buildNewChapterPrompt(existingCategoryIds, existingChapterTitles, count))
-  const obj = parsed as { chapterTitle?: unknown; categories?: unknown }
-  if (typeof obj.chapterTitle !== 'string' || !obj.chapterTitle.trim()) {
-    throw new Error('OpenAI response missing a "chapterTitle" string')
-  }
-  if (!Array.isArray(obj.categories)) throw new Error('OpenAI response missing a "categories" array')
-  return { chapterTitle: obj.chapterTitle.trim(), categories: obj.categories.map(parseGeneratedCategory) }
 }
 
 export interface CategoryReview {
@@ -171,7 +138,7 @@ ${listing}
  * batch at once), not one per category, to keep cost/latency down. A reviewer
  * failure (bad JSON, missing entries) never blocks generation — see index.ts's
  * reviewAcceptedCategories, which treats a missing review as "keep" rather
- * than discarding content over a formatting hiccup in the review call itself. */
+ * than discarding content over a formatting hiccup in the review step. */
 export async function reviewCategories(apiKey: string, categories: GeneratedCategory[]): Promise<CategoryReview[]> {
   if (categories.length === 0) return []
   const parsed = await callOpenAiJson(apiKey, buildReviewPrompt(categories))

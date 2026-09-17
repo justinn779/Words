@@ -25,7 +25,6 @@ export interface Category {
 /** Author-controlled level definition. The generator turns this into a concrete GameState. */
 export interface LevelConfig {
   id: string
-  chapterId: string
   difficulty: Difficulty
   categoryIds: string[]
   columnCount: number

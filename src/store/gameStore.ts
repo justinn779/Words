@@ -23,8 +23,9 @@ import { CATEGORIES } from '../data/categories'
 import { WORDS } from '../data/words'
 import { buildDailyLevelConfig, getTodayDateString } from '../data/dailyChallenge'
 import { getLoadedAiContent, ensureAiContentLoaded } from '../firebase/aiContent'
-import { getLoadedAiChapters } from '../firebase/aiChapters'
+import { getLoadedLevels } from '../firebase/levels'
 import { reportUnsolvableLevel } from '../firebase/reports'
+import { levelIdToNumber } from '../data/progression'
 import { usePlayerStore } from './playerStore'
 import { useContentStore } from './contentStore'
 import { playSfx, type SfxName } from '../audio/sfx'
@@ -74,7 +75,7 @@ interface GameStore {
   score: ScoreResult | null
   nowTick: number
   dragVisual: DragVisual | null
-  /** Set when the active game is a Daily Challenge run instead of a chapter level. */
+  /** Set when the active game is a Daily Challenge run instead of a generated level. */
   dailyDate: string | null
   winUnlocks: WinUnlocks | null
 
@@ -86,7 +87,7 @@ interface GameStore {
   draw: () => void
   undo: () => void
   requestHint: (level: 1 | 2) => void
-  /** Sends the current level's id/chapter/difficulty to reportUnsolvableLevel
+  /** Sends the current level's id/difficulty to reportUnsolvableLevel
    * (functions/src/index.ts), which relays it to the developer for a manual fix —
    * see src/firebase/reports.ts. Purely a notification; never touches gameplay. */
   reportCurrentLevel: () => Promise<void>
@@ -109,17 +110,16 @@ function elapsedMs(game: GameState, nowTick: number): number {
 }
 
 function findLevel(levelId: string): LevelConfig {
-  for (const entry of Object.values(getLoadedAiChapters())) {
-    const aiLevel = entry.levels.find((l) => l.id === levelId)
-    if (aiLevel) return aiLevel
+  for (const config of Object.values(getLoadedLevels())) {
+    if (config.id === levelId) return config
   }
   throw new Error(`Unknown level id: ${levelId}`)
 }
 
-/** CATEGORIES/WORDS plus whatever AI-generated content (src/firebase/aiContent.ts,
- * src/firebase/aiChapters.ts) has loaded so far — a level's categoryIds may
- * reference either. Daily Challenge never actually picks AI categoryIds (see
- * data/dailyChallenge.ts), so merging this in here has no effect on it. */
+/** CATEGORIES/WORDS plus whatever AI-generated content (src/firebase/aiContent.ts)
+ * has loaded so far — a level's categoryIds may reference either, including
+ * Daily Challenge's now that it also merges in AI categories (see
+ * data/dailyChallenge.ts). */
 function allCategories() {
   const ai = getLoadedAiContent()
   return ai.categories.length > 0 ? [...CATEGORIES, ...ai.categories] : CATEGORIES
@@ -200,10 +200,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
       dailyDate: null,
       winUnlocks: null,
     })
-    // Starting a level in the current content frontier chapter is the signal
-    // to begin generating the next one, rather than waiting for a star
-    // threshold and a manual button press — see ensureNextChapterGenerating.
-    useContentStore.getState().ensureNextChapterGenerating(levelConfig.chapterId)
+    // Starting a level is also a signal to keep the ahead-buffer topped up
+    // (see contentStore.ts's AHEAD_BUFFER) — belt-and-suspenders alongside the
+    // level grid's own check on mount, in case the player jumped straight into
+    // a level without revisiting the grid (e.g. WinModal's "下一關").
+    const levelNumber = levelIdToNumber(levelConfig.id)
+    if (levelNumber !== undefined) useContentStore.getState().ensureLevelsAhead(levelNumber)
   },
 
   startDailyLevel: async (difficulty) => {
@@ -338,7 +340,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   reportCurrentLevel: async () => {
     const { levelConfig } = get()
     if (!levelConfig) return
-    const result = await reportUnsolvableLevel(levelConfig.id, levelConfig.chapterId, levelConfig.difficulty)
+    const result = await reportUnsolvableLevel(levelConfig.id, levelConfig.difficulty)
     set({ message: result.ok ? '已回報，謝謝提供！我們會盡快確認' : result.message })
   },
 
