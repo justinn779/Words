@@ -18,7 +18,7 @@ export interface DifficultyShape {
 export const DIFFICULTY_SHAPE: Record<Difficulty, DifficultyShape> = {
   easy: { categoryCount: 6, columnCount: 3, slotCount: 3, deckEnabled: true },
   normal: { categoryCount: 10, columnCount: 4, slotCount: 4, deckEnabled: true },
-  hard: { categoryCount: 15, columnCount: 5, slotCount: 4, deckEnabled: true },
+  hard: { categoryCount: 15, columnCount: 5, slotCount: 5, deckEnabled: true },
 }
 
 export const WORDS_PER_CATEGORY: Record<Difficulty, number> = { easy: 4, normal: 5, hard: 6 }
