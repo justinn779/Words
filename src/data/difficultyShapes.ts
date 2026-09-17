@@ -16,7 +16,7 @@ export interface DifficultyShape {
 // slots/columns alone would suggest, so same-category runs stay spread out and
 // the sorting puzzle stays hard even at 'easy'.
 export const DIFFICULTY_SHAPE: Record<Difficulty, DifficultyShape> = {
-  easy: { categoryCount: 6, columnCount: 3, slotCount: 2, deckEnabled: true },
+  easy: { categoryCount: 6, columnCount: 3, slotCount: 3, deckEnabled: true },
   normal: { categoryCount: 10, columnCount: 4, slotCount: 3, deckEnabled: true },
   hard: { categoryCount: 15, columnCount: 5, slotCount: 4, deckEnabled: true },
 }
