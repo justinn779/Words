@@ -390,19 +390,25 @@
   font-size: 13px;
 }
 
-/* Two columns shared by both rows below (see Board.tsx): a flexible left
-   column for the category slots / tableau columns, and a fixed right column
-   — sized to the deck/waste piles' own --card-w — that stacks DeckPile
-   directly above WastePile. A single grid (rather than two independent flex
-   rows) is what guarantees that right column lines up between the rows;
-   flex can't promise that when each row's own content differs in width. */
+/* Two columns shared by both rows below (see Board.tsx): a left column sized
+   to the category slots / tableau columns' own content, and a right column
+   sized to the deck/waste piles' own --card-w, stacking DeckPile directly
+   above WastePile. Both columns are content-sized (not a flexible 1fr) and
+   the whole grid is then centered as one block via justify-content — so the
+   category/columns area and the deck/waste rail read as a single centered
+   group instead of the piles drifting off to the far edge of a full-width
+   row once the cards hit their max size on a wide screen. A single grid
+   (rather than two independent flex rows) is what guarantees the right
+   column lines up between the rows; flex can't promise that when each row's
+   own content differs in width. */
 .board-grid {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: auto auto;
   grid-template-rows: auto 1fr;
   column-gap: var(--card-gap);
   row-gap: 10px;
   align-items: start;
+  justify-content: center;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
