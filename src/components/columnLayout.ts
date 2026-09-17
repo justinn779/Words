@@ -49,10 +49,14 @@ function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex:
   return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * (faceDownEnd + 1) }
 }
 
-/** Every remaining (face-up) card gets its own fan step — no collapsing. */
+/** Every remaining (face-up) card gets its own thin (PEEK_STEP) peek — no
+ * badge/bunching yet, but not a full step either: a card still waiting for
+ * its run to reach COLLAPSED_GROUP_STEPS shows no more information stacked
+ * behind a full step's gap than it will once it does collapse, so there's no
+ * reason the "not collapsed yet" state should be any less thin. */
 function getFaceUpSuffixNatural(column: Card[], start: number, startStep: number): CardRenderInfo[] {
   const info: CardRenderInfo[] = []
-  for (let i = start; i < column.length; i++) info[i] = { offset: startStep + (i - start), stackedCount: 0 }
+  for (let i = start; i < column.length; i++) info[i] = { offset: startStep + PEEK_STEP * (i - start), stackedCount: 0 }
   return info
 }
 
@@ -102,13 +106,13 @@ function getFaceUpSuffixCollapsed(column: Card[], start: number, startStep: numb
       } else {
         for (let k = i; k <= runEnd; k++) {
           info[k] = { offset: step, stackedCount: 0 }
-          step += 1
+          step += PEEK_STEP
         }
       }
       i = runEnd + 1
     } else {
       info[i] = { offset: step, stackedCount: 0 }
-      step += 1
+      step += PEEK_STEP
       i++
     }
   }
