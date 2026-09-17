@@ -22,21 +22,32 @@ export interface CardRenderInfo {
   stackedCount: number
 }
 
+/** The fixed number of thin peek steps a collapsed group (face-down or a
+ * same-category face-up run) always reserves after its bunched front, no
+ * matter how many cards are actually in it — see getFaceDownPrefix and
+ * getFaceUpSuffixCollapsed. Keeping the reserved space itself constant is
+ * what makes "collapsed" a fixed shape rather than something that still
+ * grows or shrinks by a sliver as cards are added or removed. */
+const COLLAPSED_GROUP_STEPS = 3
+
 /**
  * The face-down prefix at the bottom of a column: at most the last 2 cards
  * get their own (thin, PEEK_STEP) offset, and everything before that sits
  * bunched at offset 0 behind a badge — the SAME fixed shape regardless of
- * how many face-down cards there actually are, from 1 all the way up. Only a
- * column's own top card ever starts (or gets flipped) face-up, so these are
- * always a contiguous run at index 0, and since they render identically
- * regardless of category (see CardView.tsx's card-back branch) there's no
- * information lost by using this fixed shape from the very first render — a
- * wall of identical card-backs has nothing to show anyway, so there's no
- * reason its rendered footprint should depend on the deal's card count at
- * all. This is what keeps a level's INITIAL deal itself within the reserved
- * height on the larger difficulty shapes (see difficultyShapes.ts); without
- * it, Board.tsx would have to reserve room for the deal's raw card count,
- * which only grows with content and has no ceiling.
+ * how many face-down cards there actually are, from 1 all the way up, and
+ * critically ending at the SAME fixed nextStep regardless of that count too
+ * (a 1-card and a 50-card face-down prefix reserve identical space) — so
+ * face-down cards can never nudge anything above them, ever. Only a column's
+ * own top card ever starts (or gets flipped) face-up, so these are always a
+ * contiguous run at index 0, and since they render identically regardless of
+ * category (see CardView.tsx's card-back branch) there's no information lost
+ * by using this fixed shape from the very first render — a wall of identical
+ * card-backs has nothing to show anyway, so there's no reason its rendered
+ * footprint should depend on the deal's card count at all. This is what
+ * keeps a level's INITIAL deal itself within the reserved height on the
+ * larger difficulty shapes (see difficultyShapes.ts); without it, Board.tsx
+ * would have to reserve room for the deal's raw card count, which only
+ * grows with content and has no ceiling.
  */
 function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex: number; nextStep: number } {
   const info: CardRenderInfo[] = []
@@ -45,7 +56,7 @@ function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex:
   if (faceDownEnd < 0) return { info, nextIndex: 0, nextStep: 0 }
 
   const faceDownLen = faceDownEnd + 1
-  const peekCount = Math.min(faceDownLen, 3)
+  const peekCount = Math.min(faceDownLen, COLLAPSED_GROUP_STEPS)
   const bunchEnd = faceDownEnd - (peekCount - 1)
   for (let k = 0; k <= bunchEnd; k++) {
     info[k] = { offset: 0, stackedCount: k === bunchEnd ? bunchEnd : 0 }
@@ -53,7 +64,7 @@ function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex:
   for (let j = 1; j < peekCount; j++) {
     info[bunchEnd + j] = { offset: PEEK_STEP * j, stackedCount: 0 }
   }
-  return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * peekCount }
+  return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * COLLAPSED_GROUP_STEPS }
 }
 
 /** Every remaining (face-up) card gets its own fan step — no collapsing. */
@@ -96,14 +107,14 @@ function getFaceUpSuffixCollapsed(column: Card[], start: number, startStep: numb
         runEnd++
       }
       const runLen = runEnd - i + 1
-      if (runLen >= 3) {
+      if (runLen >= COLLAPSED_GROUP_STEPS) {
         const collapsedFront = runEnd - 2
         for (let k = i; k <= collapsedFront; k++) {
           info[k] = { offset: step, stackedCount: k === collapsedFront ? collapsedFront - i : 0 }
         }
         info[runEnd - 1] = { offset: step + PEEK_STEP, stackedCount: 0 }
         info[runEnd] = { offset: step + PEEK_STEP * 2, stackedCount: 0 }
-        step += PEEK_STEP * 3
+        step += PEEK_STEP * COLLAPSED_GROUP_STEPS
       } else {
         for (let k = i; k <= runEnd; k++) {
           info[k] = { offset: step, stackedCount: 0 }
