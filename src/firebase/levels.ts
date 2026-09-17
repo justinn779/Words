@@ -12,6 +12,7 @@
 
 import type { LevelConfig } from '../engine/types'
 import { getFirebase, waitForSignedInUser } from './config'
+import { levelIdToNumber } from '../data/progression'
 
 let cache: Record<number, LevelConfig> = {}
 let anyLevelEverRequested = false
@@ -65,8 +66,8 @@ async function loadLevels(): Promise<void> {
     const next: Record<number, LevelConfig> = {}
     snap.forEach((doc) => {
       const data = doc.data() as { status?: string; config?: LevelConfig }
-      const levelNumber = Number(doc.id)
-      if (data.status === 'ready' && data.config && Number.isFinite(levelNumber)) {
+      const levelNumber = levelIdToNumber(doc.id)
+      if (data.status === 'ready' && data.config && levelNumber !== undefined) {
         next[levelNumber] = data.config
       }
     })
