@@ -26,18 +26,32 @@ export default function Board() {
   // horizontal scrollbar. Without this, a board with few columns/short
   // stacks left most of a tall phone screen empty below a small,
   // width-capped table.
+  //
+  // Deliberately a window "resize" listener plus a one-off measurement on
+  // mount, NOT a ResizeObserver watching .table-area itself. .top-row's
+  // category slots and the deck also scale off --card-w (see .slot in
+  // App.css), so .table-area's own height isn't independent of the very
+  // --card-w this measurement feeds into: growing --card-w grows .top-row,
+  // which shrinks the space .game-screen's flex layout leaves for
+  // .table-row, which shrinks .table-area — a ResizeObserver here would see
+  // that shrink, compute a smaller --card-w, see .table-area grow back, and
+  // ping-pong forever (confirmed live: forcing --card-w down by 100px grew
+  // .table-area's measured height, not shrank it). A window resize is
+  // triggered by the player, never by our own re-render, so listening to it
+  // instead reads one honest snapshot per real resize and settles.
   const tableAreaRef = useRef<HTMLDivElement>(null)
   const [tableSize, setTableSize] = useState<{ width: number; height: number } | null>(null)
 
   useEffect(() => {
-    const el = tableAreaRef.current
-    if (!el) return
-    const observer = new ResizeObserver((entries) => {
-      const rect = entries[0]?.contentRect
-      if (rect) setTableSize({ width: rect.width, height: rect.height })
-    })
-    observer.observe(el)
-    return () => observer.disconnect()
+    const measure = () => {
+      const el = tableAreaRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      setTableSize({ width: rect.width, height: rect.height })
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
   }, [])
 
   // Every column always stays on one line — no wrapping onto a second row.

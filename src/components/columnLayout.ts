@@ -23,17 +23,20 @@ export interface CardRenderInfo {
 }
 
 /**
- * The face-down prefix at the bottom of a column, always collapsed to 2 thin
- * peek steps (see PEEK_STEP) once it's 3+ cards long — unconditionally, not
- * just once the column outgrows its budget. Only a column's own top card ever
- * starts (or gets flipped) face-up, so these are always a contiguous run at
- * index 0, and since they render identically regardless of category (see
- * CardView.tsx's card-back branch) there's no information lost by collapsing
- * them from the very first render — a wall of identical card-backs has
- * nothing to show anyway. This is what keeps a level's INITIAL deal itself
- * within the reserved height on the larger difficulty shapes (see
- * difficultyShapes.ts); without it, Board.tsx would have to reserve room for
- * the deal's raw card count, which only grows with content and has no ceiling.
+ * The face-down prefix at the bottom of a column: at most the last 2 cards
+ * get their own (thin, PEEK_STEP) offset, and everything before that sits
+ * bunched at offset 0 behind a badge — the SAME fixed shape regardless of
+ * how many face-down cards there actually are, from 1 all the way up. Only a
+ * column's own top card ever starts (or gets flipped) face-up, so these are
+ * always a contiguous run at index 0, and since they render identically
+ * regardless of category (see CardView.tsx's card-back branch) there's no
+ * information lost by using this fixed shape from the very first render — a
+ * wall of identical card-backs has nothing to show anyway, so there's no
+ * reason its rendered footprint should depend on the deal's card count at
+ * all. This is what keeps a level's INITIAL deal itself within the reserved
+ * height on the larger difficulty shapes (see difficultyShapes.ts); without
+ * it, Board.tsx would have to reserve room for the deal's raw card count,
+ * which only grows with content and has no ceiling.
  */
 function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex: number; nextStep: number } {
   const info: CardRenderInfo[] = []
@@ -42,17 +45,15 @@ function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex:
   if (faceDownEnd < 0) return { info, nextIndex: 0, nextStep: 0 }
 
   const faceDownLen = faceDownEnd + 1
-  if (faceDownLen >= 3) {
-    const collapsedFront = faceDownEnd - 2
-    for (let k = 0; k <= collapsedFront; k++) {
-      info[k] = { offset: 0, stackedCount: k === collapsedFront ? collapsedFront : 0 }
-    }
-    info[faceDownEnd - 1] = { offset: PEEK_STEP, stackedCount: 0 }
-    info[faceDownEnd] = { offset: PEEK_STEP * 2, stackedCount: 0 }
-    return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * 3 }
+  const peekCount = Math.min(faceDownLen, 3)
+  const bunchEnd = faceDownEnd - (peekCount - 1)
+  for (let k = 0; k <= bunchEnd; k++) {
+    info[k] = { offset: 0, stackedCount: k === bunchEnd ? bunchEnd : 0 }
   }
-  for (let k = 0; k <= faceDownEnd; k++) info[k] = { offset: k, stackedCount: 0 }
-  return { info, nextIndex: faceDownEnd + 1, nextStep: faceDownLen }
+  for (let j = 1; j < peekCount; j++) {
+    info[bunchEnd + j] = { offset: PEEK_STEP * j, stackedCount: 0 }
+  }
+  return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * peekCount }
 }
 
 /** Every remaining (face-up) card gets its own fan step — no collapsing. */
