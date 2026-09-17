@@ -50,6 +50,20 @@ export function ensureAiChaptersLoaded(): Promise<void> {
   return loadPromise
 }
 
+/** Forces a fresh fetch, replacing the cache (and hasAnyChapterEverBeenRequested's
+ * flag) instead of reusing the one-time load — same idea as aiContent.ts's
+ * refreshAiContent. src/components/ChapterList.tsx calls this on every mount, not
+ * just ensureAiChaptersLoaded(): App.tsx's one-time call at startup only gets ONE
+ * chance to notice "nothing generated yet" and bootstrap chapter 1 — if the
+ * player's tab was already open from before an admin wipe (or the very first
+ * bootstrap call happened to lose a race), that one chance is gone for the rest
+ * of the session and chapter 1 never gets a trigger again. Re-checking Firestore
+ * fresh every time the chapter list opens gives it another chance. */
+export function refreshAiChapters(): Promise<void> {
+  loadPromise = loadAiChapters()
+  return loadPromise
+}
+
 async function loadAiChapters(): Promise<void> {
   try {
     const fb = await getFirebase()

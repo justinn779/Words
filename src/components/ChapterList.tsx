@@ -12,8 +12,22 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
   const levelRecords = usePlayerStore((s) => s.levelRecords)
   const aiChapters = useContentStore((s) => s.aiChapters)
   const generatingChapterId = useContentStore((s) => s.generatingChapterId)
+  const refreshAndMaybeBootstrap = useContentStore((s) => s.refreshAndMaybeBootstrap)
   const extraLevels = Object.values(aiChapters).flatMap((e) => e.levels)
   const contentOrder = getContentChapterOrder(extraLevels)
+
+  // App.tsx's one-time load-on-startup only gets ONE chance to notice "nothing
+  // generated yet" and bootstrap chapter 1 — if this tab was already open
+  // before an admin wipe (or that one chance lost a race), it never gets
+  // retried for the rest of the session. Re-checking Firestore fresh every
+  // time the chapter list is actually opened gives it another chance, right
+  // where a player would notice the list is empty anyway.
+  useEffect(() => {
+    void refreshAndMaybeBootstrap()
+    // Intentionally once per mount only — this is a deliberate extra chance,
+    // not a poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Every chapter is generated on demand (functions/src/index.ts's
   // generateNewChapterNow) — a row only exists once it actually has content, so
@@ -23,8 +37,8 @@ export default function ChapterList({ onBack, onOpenChapter }: ChapterListProps)
   // rendered as a single trailing row below, not per named chapter. Starting a
   // level auto-triggers this (see gameStore.ts's startLevel ->
   // ensureNextChapterGenerating); a brand-new install with zero chapters yet
-  // bootstraps the very first one the same way (src/store/contentStore.ts's
-  // loadAiChapters).
+  // bootstraps the very first one the same way (see the mount effect above and
+  // src/store/contentStore.ts's maybeBootstrapFirstChapter).
   const generatingNext = generatingChapterId === GENERATING_NEW_CHAPTER
   const nextChapterComing = generatingNext || isNextNewChapterGateOpen(levelRecords, extraLevels)
 

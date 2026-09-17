@@ -8,6 +8,7 @@ import {
   ensureAiChaptersLoaded,
   getLoadedAiChapters,
   hasAnyChapterEverBeenRequested,
+  refreshAiChapters,
   requestNewChapterGeneration,
   type AiChapterEntry,
 } from '../firebase/aiChapters'
@@ -22,6 +23,10 @@ interface ContentState {
   aiChapters: Record<string, AiChapterEntry>
   generatingChapterId: string | null
   loadAiChapters: () => Promise<void>
+  /** Re-checks Firestore fresh (bypassing the one-time cache) and re-runs the
+   * bootstrap check below — see refreshAiChapters's own comment for why this
+   * needs to be more than just loadAiChapters called again. */
+  refreshAndMaybeBootstrap: () => Promise<void>
   generateNewChapter: () => Promise<{ ok: true; chapterId: string } | { ok: false; message: string }>
   /** Fire-and-forget: call whenever a player starts a level. Every chapter is
    * generated on demand now (no more fixed roster) — if that level's chapter is
@@ -41,19 +46,14 @@ export const useContentStore = create<ContentState>((set, get) => ({
     await ensureAiChaptersLoaded()
     const aiChapters = getLoadedAiChapters()
     set({ aiChapters })
-    // Bootstrap: a brand-new install (or a freshly wiped database) has no
-    // chapters at all yet — nothing would ever call ensureNextChapterGenerating
-    // in that state (it only fires from starting a level, and there's no level
-    // to start), so kick off the very first chapter here instead. Gated on
-    // hasAnyChapterEverBeenRequested(), not just aiChapters being empty — a
-    // chapter still `status: 'generating'` (from this or another session) is
-    // invisible to aiChapters until it's ready, and without this check,
-    // reloading the page while chapter 1 is still generating looked identical
-    // to "nothing has ever been requested" and fired a duplicate, separately
-    // billed generation — confirmed happening in testing.
-    if (Object.keys(aiChapters).length === 0 && !hasAnyChapterEverBeenRequested() && !get().generatingChapterId) {
-      void get().generateNewChapter()
-    }
+    maybeBootstrapFirstChapter(get, aiChapters)
+  },
+
+  refreshAndMaybeBootstrap: async () => {
+    await refreshAiChapters()
+    const aiChapters = getLoadedAiChapters()
+    set({ aiChapters })
+    maybeBootstrapFirstChapter(get, aiChapters)
   },
 
   generateNewChapter: async () => {
@@ -77,3 +77,18 @@ export const useContentStore = create<ContentState>((set, get) => ({
     void get().generateNewChapter()
   },
 }))
+
+/** Bootstrap: a brand-new install (or a freshly wiped database) has no chapters
+ * at all yet — nothing would ever call ensureNextChapterGenerating in that state
+ * (it only fires from starting a level, and there's no level to start), so kick
+ * off the very first chapter here instead. Gated on hasAnyChapterEverBeenRequested(),
+ * not just aiChapters being empty — a chapter still `status: 'generating'` (from
+ * this or another session) is invisible to aiChapters until it's ready, and
+ * without this check, reloading the page while chapter 1 is still generating
+ * looked identical to "nothing has ever been requested" and fired a duplicate,
+ * separately billed generation — confirmed happening in testing. */
+function maybeBootstrapFirstChapter(get: () => ContentState, aiChapters: Record<string, AiChapterEntry>): void {
+  if (Object.keys(aiChapters).length === 0 && !hasAnyChapterEverBeenRequested() && !get().generatingChapterId) {
+    void get().generateNewChapter()
+  }
+}
