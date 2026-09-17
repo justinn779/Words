@@ -41,7 +41,17 @@ export default function Board() {
   const slots = Math.max(1, columnCount)
   const widthPart = `calc((min(100vw, 1180px) - 40px - ${slots + 1} * var(--card-gap)) / ${slots})`
   const heightFactor = 1.309 + Math.max(0, reservedLen - 1) * 0.4
-  const heightPart = `calc(52vh / ${heightFactor})`
+  // How much of the viewport's height is actually left for the table, once
+  // HUD/top-row/TodoList take their share, isn't knowable without measuring
+  // them — and TodoList's own share grows with how many categories this
+  // difficulty has (more categories -> more wrapped chip rows), which is why
+  // this shrinks with column count (columnCount tracks difficulty, and
+  // difficulty tracks category count — see difficultyShapes.ts) rather than
+  // using one flat guess for every difficulty. Deliberately conservative: a
+  // bit of empty space below a short/easy table is fine; a hard table tall
+  // enough to get clipped by .table-row's own overflow:hidden is not.
+  const availableVh = Math.max(24, 46 - slots * 3)
+  const heightPart = `calc(${availableVh}vh / ${heightFactor})`
   const cardWidth = `clamp(30px, min(${widthPart}, ${heightPart}), 140px)`
 
   return (
