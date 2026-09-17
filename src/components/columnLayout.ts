@@ -6,6 +6,15 @@
 
 import type { Card } from '../engine/types'
 
+/** How much of a hidden card peeks out from behind the one in front of it,
+ * within a collapsed group — in units of a normal (uncollapsed) fan step. A
+ * collapsed card shows no information worth spending a full step's peek on
+ * (a card-back is identical to every other, and a collapsed same-category
+ * card's word is already implied by the ones still fully visible), so a
+ * sliver is enough to read as "more cards are stacked here" without eating
+ * into the column's height budget the way a full step would. */
+const PEEK_STEP = 1 / 3
+
 export interface CardRenderInfo {
   /** Fan-step offset, in units of --card-step. */
   offset: number
@@ -38,9 +47,9 @@ function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex:
     for (let k = 0; k <= collapsedFront; k++) {
       info[k] = { offset: 0, stackedCount: k === collapsedFront ? collapsedFront : 0 }
     }
-    info[faceDownEnd - 1] = { offset: 1, stackedCount: 0 }
-    info[faceDownEnd] = { offset: 2, stackedCount: 0 }
-    return { info, nextIndex: faceDownEnd + 1, nextStep: 3 }
+    info[faceDownEnd - 1] = { offset: PEEK_STEP, stackedCount: 0 }
+    info[faceDownEnd] = { offset: PEEK_STEP * 2, stackedCount: 0 }
+    return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * 3 }
   }
   for (let k = 0; k <= faceDownEnd; k++) info[k] = { offset: k, stackedCount: 0 }
   return { info, nextIndex: faceDownEnd + 1, nextStep: faceDownLen }
@@ -91,9 +100,9 @@ function getFaceUpSuffixCollapsed(column: Card[], start: number, startStep: numb
         for (let k = i; k <= collapsedFront; k++) {
           info[k] = { offset: step, stackedCount: k === collapsedFront ? collapsedFront - i : 0 }
         }
-        info[runEnd - 1] = { offset: step + 1, stackedCount: 0 }
-        info[runEnd] = { offset: step + 2, stackedCount: 0 }
-        step += 3
+        info[runEnd - 1] = { offset: step + PEEK_STEP, stackedCount: 0 }
+        info[runEnd] = { offset: step + PEEK_STEP * 2, stackedCount: 0 }
+        step += PEEK_STEP * 3
       } else {
         for (let k = i; k <= runEnd; k++) {
           info[k] = { offset: step, stackedCount: 0 }
