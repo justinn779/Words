@@ -11,12 +11,14 @@ import {
   recycleDeck,
   undo as engineUndo,
   getHint,
+  autoCompleteCategory,
   checkWin,
   calculateScore,
   recordHintUsed,
   recordCoinsSpent,
   HINT_LEVEL_1_COST,
   HINT_LEVEL_2_COST,
+  HINT_CATEGORY_COST,
   UNDO_COST,
 } from '../engine'
 import { CATEGORIES } from '../data/categories'
@@ -70,6 +72,9 @@ interface GameStore {
   game: GameState | null
   selection: Selection | null
   hint: HintResult | null
+  /** True while the player is picking which active category slot to auto-complete
+   * after clicking the category hint button — see requestCategoryHint. */
+  awaitingCategoryHint: boolean
   invalidFlash: FlashState | null
   message: string | null
   score: ScoreResult | null
@@ -87,6 +92,9 @@ interface GameStore {
   draw: () => void
   undo: () => void
   requestHint: (level: 1 | 2) => void
+  /** Starts (or cancels, if already awaiting) the category-hint flow: the next
+   * click on an active category slot auto-completes it — see resolveCategoryHint. */
+  requestCategoryHint: () => void
   /** Sends the current level's id/difficulty to reportUnsolvableLevel
    * (functions/src/index.ts), which relays it to the developer for a manual fix —
    * see src/firebase/reports.ts. Purely a notification; never touches gameplay. */
@@ -173,6 +181,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   game: null,
   selection: null,
   hint: null,
+  awaitingCategoryHint: false,
   invalidFlash: null,
   message: null,
   score: null,
@@ -202,6 +211,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       game,
       selection: null,
       hint: null,
+      awaitingCategoryHint: false,
       invalidFlash: null,
       score: null,
       nowTick: Date.now(),
@@ -229,6 +239,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       game,
       selection: null,
       hint: null,
+      awaitingCategoryHint: false,
       invalidFlash: null,
       score: null,
       nowTick: Date.now(),
@@ -239,7 +250,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   exitLevel: () => {
-    set({ levelConfig: null, game: null, selection: null, hint: null, score: null, dailyDate: null, winUnlocks: null })
+    set({
+      levelConfig: null,
+      game: null,
+      selection: null,
+      hint: null,
+      awaitingCategoryHint: false,
+      score: null,
+      dailyDate: null,
+      winUnlocks: null,
+    })
   },
 
   tick: () => set({ nowTick: Date.now() }),
@@ -247,8 +267,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   dismissMessage: () => set({ message: null }),
 
   clickCard: (loc) => {
-    const { game, selection } = get()
+    const { game, selection, awaitingCategoryHint } = get()
     if (!game || game.status !== 'playing') return
+    // Clicking a card cancels a pending category-hint selection rather than
+    // silently ignoring the click — the player has moved on to something else.
+    if (awaitingCategoryHint) set({ awaitingCategoryHint: false })
 
     const clickedCardId =
       loc.zone === 'waste' ? game.waste[game.waste.length - 1]?.id : game.columns[loc.columnIndex][loc.cardIndex]?.id
@@ -301,8 +324,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   clickSlot: (slotIndex) => {
-    const { game, selection } = get()
-    if (!game || game.status !== 'playing' || !selection) return
+    const { game, selection, awaitingCategoryHint } = get()
+    if (!game || game.status !== 'playing') return
+    if (awaitingCategoryHint) {
+      resolveCategoryHint(get, set, slotIndex)
+      return
+    }
+    if (!selection) return
     // A whole same-category run can be delivered to its slot at once; the engine
     // (moveStack) validates capacity and category, so no pre-check is needed here.
     attemptMoveSelection(get, set, selection, { zone: 'slot', index: slotIndex })
@@ -313,9 +341,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     if (!game || game.status !== 'playing') return
     if (game.deck.length > 0) {
       sfx('cardFlip')
-      set({ game: drawDeckCard(game), selection: null, hint: null })
+      set({ game: drawDeckCard(game), selection: null, hint: null, awaitingCategoryHint: false })
     } else if (game.waste.length > 0) {
-      set({ game: recycleDeck(game), selection: null, hint: null })
+      set({ game: recycleDeck(game), selection: null, hint: null, awaitingCategoryHint: false })
     }
   },
 
@@ -327,7 +355,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       return
     }
     const undone = engineUndo(game)
-    set({ game: recordCoinsSpent(undone, UNDO_COST), selection: null, hint: null })
+    set({ game: recordCoinsSpent(undone, UNDO_COST), selection: null, hint: null, awaitingCategoryHint: false })
   },
 
   requestHint: (level) => {
@@ -343,7 +371,23 @@ export const useGameStore = create<GameStore>((set, get) => ({
       set({ message: '金幣不足，無法使用提示' })
       return
     }
-    set({ game: recordHintUsed(game, cost), hint, selection: null })
+    set({ game: recordHintUsed(game, cost), hint, selection: null, awaitingCategoryHint: false })
+  },
+
+  requestCategoryHint: () => {
+    const { game, awaitingCategoryHint } = get()
+    if (!game || game.status !== 'playing') return
+    // Clicking the button again while already awaiting a slot pick cancels it.
+    if (awaitingCategoryHint) {
+      set({ awaitingCategoryHint: false })
+      return
+    }
+    const hasActiveSlot = game.categorySlots.some((slot) => slot !== null)
+    if (!hasActiveSlot) {
+      set({ message: '目前沒有已啟用的分類，無法使用此提示' })
+      return
+    }
+    set({ awaitingCategoryHint: true, selection: null, hint: null, message: '請點選一個已有分類的分類欄' })
   },
 
   reportCurrentLevel: async () => {
@@ -425,6 +469,27 @@ function attemptMoveSelection(
 
   finalizeMove(get, set, game, result.state)
   return true
+}
+
+/** Resolves a pending category-hint selection (see requestCategoryHint): charges
+ * the coin cost only once a valid, already-active slot is actually picked, then
+ * auto-completes that category. An empty slot isn't a valid pick — nothing to
+ * complete — so it just re-prompts without charging or leaving awaiting mode. */
+function resolveCategoryHint(get: () => GameStore, set: (partial: Partial<GameStore>) => void, slotIndex: number) {
+  const { game } = get()
+  if (!game) return
+  if (!game.categorySlots[slotIndex]) {
+    set({ message: '請選擇一個已有分類的分類欄' })
+    return
+  }
+  if (!usePlayerStore.getState().spendCoins(HINT_CATEGORY_COST)) {
+    set({ message: '金幣不足，無法使用提示', awaitingCategoryHint: false })
+    return
+  }
+  const result = autoCompleteCategory(game, slotIndex)
+  set({ awaitingCategoryHint: false })
+  if (!result.success) return
+  finalizeMove(get, set, game, recordHintUsed(result.state, HINT_CATEGORY_COST))
 }
 
 function countFaceUp(game: GameState): number {

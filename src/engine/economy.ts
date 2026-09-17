@@ -2,6 +2,7 @@ import type { GameState } from './types'
 
 export const HINT_LEVEL_1_COST = 10
 export const HINT_LEVEL_2_COST = 25
+export const HINT_CATEGORY_COST = 50
 export const UNDO_COST = 10
 
 /**

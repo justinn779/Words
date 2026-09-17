@@ -9,6 +9,7 @@ import {
   drawDeckCard,
   recycleDeck,
   undo,
+  autoCompleteCategory,
 } from '../moves'
 import { checkWin, calculateScore } from '../win'
 import type { LevelConfig } from '../types'
@@ -137,6 +138,45 @@ describe('category slot activation and completion', () => {
     state = result.state
     expect(state.categorySlots[0]).toBeNull()
     expect(state.completedCategories).toEqual(['fruit'])
+  })
+})
+
+describe('autoCompleteCategory', () => {
+  it('rejects an inactive (empty) slot', () => {
+    const state = makeState([[word('fruit', 'apple')]], { categorySlots: [null, null] })
+    const result = autoCompleteCategory(state, 0)
+    expect(result.success).toBe(false)
+  })
+
+  it('pulls every remaining word of the category from columns, waste, and deck, and completes it', () => {
+    const state = makeState(
+      [
+        [word('animal', 'dog', false), word('fruit', 'apple', false)], // buried, face-down
+        [word('fruit', 'banana', true)],
+      ],
+      {
+        deck: [word('fruit', 'cherry', false)],
+        waste: [word('fruit', 'durian', true)],
+        categoryMeta: { fruit: { name: '水果', required: 4 }, animal: { name: '動物', required: 1 } },
+        categorySlots: [{ slotIndex: 0, categoryId: 'fruit', name: '水果', collected: 0, required: 4 }, null],
+      },
+    )
+    const result = autoCompleteCategory(state, 0)
+    expect(result.success).toBe(true)
+    const next = result.state
+
+    // Slot is completed and freed.
+    expect(next.categorySlots[0]).toBeNull()
+    expect(next.completedCategories).toEqual(['fruit'])
+
+    // Every fruit card is gone from columns/waste/deck; the unrelated animal card stays.
+    expect(next.columns[0].map((c) => c.id)).toEqual(['word-animal-dog'])
+    expect(next.columns[1]).toEqual([])
+    expect(next.deck).toEqual([])
+    expect(next.waste).toEqual([])
+
+    // The now-exposed top of column 0 gets flipped face-up.
+    expect(next.columns[0][0].faceUp).toBe(true)
   })
 })
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useGameStore, getElapsedMs } from '../store/gameStore'
 import { usePlayerStore } from '../store/playerStore'
-import { HINT_LEVEL_1_COST, HINT_LEVEL_2_COST, UNDO_COST } from '../engine'
+import { HINT_LEVEL_1_COST, HINT_LEVEL_2_COST, HINT_CATEGORY_COST, UNDO_COST } from '../engine'
 
 function formatTime(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000)
@@ -19,6 +19,8 @@ export default function HUD() {
   const tick = useGameStore((s) => s.tick)
   const undo = useGameStore((s) => s.undo)
   const requestHint = useGameStore((s) => s.requestHint)
+  const requestCategoryHint = useGameStore((s) => s.requestCategoryHint)
+  const awaitingCategoryHint = useGameStore((s) => s.awaitingCategoryHint)
   const reportCurrentLevel = useGameStore((s) => s.reportCurrentLevel)
   const exitLevel = useGameStore((s) => s.exitLevel)
   const message = useGameStore((s) => s.message)
@@ -60,6 +62,13 @@ export default function HUD() {
         </button>
         <button type="button" onClick={() => requestHint(2)}>
           提示 II ({HINT_LEVEL_2_COST})
+        </button>
+        <button
+          type="button"
+          className={awaitingCategoryHint ? 'hud-category-hint-active' : ''}
+          onClick={requestCategoryHint}
+        >
+          {awaitingCategoryHint ? '請選擇分類欄…（取消）' : `分類提示 (${HINT_CATEGORY_COST})`}
         </button>
         {confirmingReport ? (
           <span className="hud-report-confirm">

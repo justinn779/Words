@@ -369,6 +369,11 @@
   border-color: var(--danger);
 }
 
+.hud-category-hint-active {
+  color: var(--success);
+  border-color: var(--success);
+}
+
 .hud-report-confirm {
   display: flex;
   align-items: center;
@@ -385,11 +390,32 @@
   font-size: 13px;
 }
 
+/* Two columns shared by both rows below (see Board.tsx): a flexible left
+   column for the category slots / tableau columns, and a fixed right column
+   — sized to the deck/waste piles' own --card-w — that stacks DeckPile
+   directly above WastePile. A single grid (rather than two independent flex
+   rows) is what guarantees that right column lines up between the rows;
+   flex can't promise that when each row's own content differs in width. */
+.board-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto 1fr;
+  column-gap: var(--card-gap);
+  row-gap: 10px;
+  align-items: start;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+
 .top-row {
+  grid-column: 1;
+  grid-row: 1;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .category-slots {
@@ -426,6 +452,19 @@
 
 .slot-hinted {
   box-shadow: 0 0 0 3px rgba(193, 122, 77, 0.5);
+}
+
+/* An active slot the player can currently click to auto-complete via the
+   category hint (see requestCategoryHint) — pulses so it reads as pickable
+   without being confused with .slot-hinted's move-hint highlight. */
+.slot-category-hint-pickable {
+  cursor: pointer;
+  animation: slot-category-hint-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes slot-category-hint-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(111, 143, 92, 0.35); }
+  50% { box-shadow: 0 0 0 5px rgba(111, 143, 92, 0.7); }
 }
 
 /* Feedback when a card/stack lands in a slot, so it doesn't just blink out. */
@@ -516,10 +555,11 @@
   color: var(--ink-soft);
 }
 
-/* Holds just the columns now (the draw pile docks beside the category slots
-   in .top-row instead — see Board.tsx). */
+/* Holds just the columns (the waste pile is a separate .board-grid item
+   beside it — see Board.tsx). */
 .table-row {
-  flex: 1 1 auto;
+  grid-column: 1;
+  grid-row: 2;
   min-height: 60px;
   min-width: 0;
   display: flex;
@@ -573,25 +613,16 @@
   background: none;
 }
 
-.deck-waste {
-  /* Shares the columns'/slots' --card-w now — it sits in the same row as the
-     category slots (.top-row) and looked mismatched at its own smaller scale.
-     .top-row's flex-wrap handles it if that's ever too wide for a narrow
-     phone (wraps onto its own line rather than forcing a shrink). */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--card-gap);
-  flex-shrink: 0;
-}
-
 .deck-pile {
+  grid-column: 2;
+  grid-row: 1;
   position: relative;
   padding: 0;
   border: none;
   background: none;
   width: var(--card-w);
   height: var(--card-h);
+  justify-self: center;
 }
 
 .deck-count {
@@ -608,8 +639,11 @@
 }
 
 .waste-pile {
+  grid-column: 2;
+  grid-row: 2;
   width: var(--card-w);
   height: var(--card-h);
+  justify-self: center;
 }
 
 .card-empty-pile {

@@ -41,11 +41,12 @@ interface SlotViewProps {
   index: number
   slot: CategorySlotState | null
   isHintTarget: boolean
+  isCategoryHintPickable: boolean
   effect: SlotFx | undefined
   onClick: () => void
 }
 
-function SlotView({ index, slot, isHintTarget, effect, onClick }: SlotViewProps) {
+function SlotView({ index, slot, isHintTarget, isCategoryHintPickable, effect, onClick }: SlotViewProps) {
   const displayedCollected = useCountUp(slot?.collected ?? 0)
 
   return (
@@ -55,6 +56,7 @@ function SlotView({ index, slot, isHintTarget, effect, onClick }: SlotViewProps)
         'slot',
         slot ? 'slot-active' : 'slot-empty',
         isHintTarget ? 'slot-hinted' : '',
+        isCategoryHintPickable ? 'slot-category-hint-pickable' : '',
         effect?.kind === 'receive' ? 'slot-receiving' : '',
       ].join(' ')}
       data-dropzone="slot"
@@ -93,6 +95,7 @@ export default function CategorySlots() {
   const completed = useGameStore((s) => s.game?.completedCategories ?? [])
   const clickSlot = useGameStore((s) => s.clickSlot)
   const hint = useGameStore((s) => s.hint)
+  const awaitingCategoryHint = useGameStore((s) => s.awaitingCategoryHint)
 
   // Transient per-slot effects (a "+N" bump when cards land, a burst when a
   // category finishes) so a stack vanishing into a slot reads as "collected"
@@ -144,6 +147,7 @@ export default function CategorySlots() {
             index={i}
             slot={slot}
             isHintTarget={isHintTarget}
+            isCategoryHintPickable={awaitingCategoryHint && slot !== null}
             effect={fx[i]}
             onClick={() => clickSlot(i)}
           />

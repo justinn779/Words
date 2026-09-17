@@ -221,6 +221,49 @@ export function completeCategory(state: GameState, slotIndex: number): GameState
 }
 
 /**
+ * Category-hint power-up: given an already-active slot, pulls every remaining
+ * word card of that category out of the columns, waste, and deck — regardless
+ * of face-up state or position — and delivers them all into the slot at once,
+ * completing it. A category's word count always equals its slot's `required`
+ * (see createGame.ts), so every remaining card for it is guaranteed to still
+ * be somewhere in columns/waste/deck, never partially "missing".
+ */
+export function autoCompleteCategory(state: GameState, slotIndex: number): MoveResult {
+  const slot = state.categorySlots[slotIndex]
+  if (!slot) return { success: false, state, reason: 'slot-not-active' }
+  const categoryId = slot.categoryId
+
+  const belongsToCategory = (card: Card) => card.cardType === 'word' && card.categoryId === categoryId
+
+  let lastCard: WordCard | undefined
+  const pull = (cards: Card[]): Card[] =>
+    cards.filter((card) => {
+      if (!belongsToCategory(card)) return true
+      lastCard = { ...(card as WordCard), faceUp: true }
+      return false
+    })
+
+  let next: GameState = {
+    ...state,
+    columns: state.columns.map(pull),
+    waste: pull(state.waste),
+    deck: pull(state.deck),
+  }
+
+  for (let i = 0; i < next.columns.length; i++) {
+    next = flipTopCard(next, i)
+  }
+
+  const slots = next.categorySlots.slice()
+  slots[slotIndex] = { ...slot, collected: slot.required, lastCard }
+  next = { ...next, categorySlots: slots }
+  next = completeCategory(next, slotIndex)
+
+  const finalState = withHistory(state, { ...next, moves: state.moves + 1 })
+  return { success: true, state: finalState }
+}
+
+/**
  * Universal single-card move entry point used by the UI. Dispatches to the
  * category- or slot-specific logic as needed.
  */

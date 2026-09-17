@@ -3,11 +3,11 @@
 
 export * from './types'
 export { createGame } from './createGame'
-export { canMoveCard, canMoveStack, moveCard, moveStack, flipTopCard, drawDeckCard, recycleDeck, moveCategoryCard, moveToCategorySlot, completeCategory, undo, canPlaceCardsOn } from './moves'
+export { canMoveCard, canMoveStack, moveCard, moveStack, flipTopCard, drawDeckCard, recycleDeck, moveCategoryCard, moveToCategorySlot, completeCategory, autoCompleteCategory, undo, canPlaceCardsOn } from './moves'
 export { getAvailableMoves, getHint } from './hint'
 export { checkWin, calculateScore, getTodoList } from './win'
 export { serializeGameState, deserializeGameState } from './serialize'
-export { recordHintUsed, recordCoinsSpent, HINT_LEVEL_1_COST, HINT_LEVEL_2_COST, UNDO_COST } from './economy'
+export { recordHintUsed, recordCoinsSpent, HINT_LEVEL_1_COST, HINT_LEVEL_2_COST, HINT_CATEGORY_COST, UNDO_COST } from './economy'
 export { solve } from './solver'
 export { generateSolvableLevel } from './generator'
 export type { GenerateOptions, GenerateResult, LevelConfigWithoutSeed } from './generator'
