@@ -62,15 +62,16 @@ export function totalCardCount(categoryWordCounts: Record<string, number>): numb
 }
 
 /**
- * Deck size for a level: half its total card pool, so the deck ends up the
- * same size as the columns it's dealt alongside (createGame.ts splits the
- * shuffled pool deckSize/rest between the two) — a much bigger share of the
- * board hidden in the deck than the old fixed per-difficulty counts (0 for
- * easy, 7 for normal, 9 for hard), by explicit request: with most of the
- * board visible up front, the game had gotten too easy.
+ * Deck size for a level: two-thirds of its total card pool, so the deck ends
+ * up twice the size of the columns it's dealt alongside (createGame.ts splits
+ * the shuffled pool deckSize/rest between the two, deck:columns = 2:1). Was a
+ * plain 1:1 split before this — by explicit request, that left too much of
+ * the board dealt out (and potentially deadlocked) up front; shifting more of
+ * the pool into the deck, revealed a card at a time via draw/recycle instead,
+ * cuts down on how often a level gets stuck with no legal move left.
  */
 export function computeDeckSize(categoryWordCounts: Record<string, number>): number {
-  return Math.round(totalCardCount(categoryWordCounts) / 2)
+  return Math.round((totalCardCount(categoryWordCounts) * 2) / 3)
 }
 
 /**

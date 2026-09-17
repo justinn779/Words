@@ -416,13 +416,14 @@ function levelDocId(levelNumber: number): string {
   return `level-${levelNumber}`
 }
 
-/** Level numbers are 1-based; difficulty repeats in a fixed 3-level cycle
- * (1=easy, 2=normal, 3=hard, 4=easy, ...) — mirrors src/data/progression.ts's
- * getDifficultyForLevel (duplicated rather than imported since that module
- * also pulls in client-only types; this is intentionally the one place the
- * rule is allowed to drift, and it's a single line to keep in sync). */
+/** Level numbers are 1-based; difficulty repeats in a fixed 5-level cycle
+ * (1=easy, 2=normal, 3=normal, 4=hard, 5=normal, 6=easy, ...) — mirrors
+ * src/data/progression.ts's getDifficultyForLevel (duplicated rather than
+ * imported since that module also pulls in client-only types; this is
+ * intentionally the one place the rule is allowed to drift, and it's a
+ * single line to keep in sync). */
 function difficultyForLevel(levelNumber: number): Difficulty {
-  const cycle: Difficulty[] = ['easy', 'normal', 'hard']
+  const cycle: Difficulty[] = ['easy', 'normal', 'normal', 'hard', 'normal']
   return cycle[(levelNumber - 1) % cycle.length]
 }
 

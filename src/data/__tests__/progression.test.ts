@@ -3,13 +3,16 @@ import { getDifficultyForLevel, isLevelUnlocked, levelId, levelIdToNumber } from
 import type { LevelRecords } from '../progression'
 
 describe('getDifficultyForLevel', () => {
-  it('cycles easy/normal/hard every 3 levels', () => {
+  it('cycles easy/normal/normal/hard/normal every 5 levels', () => {
     expect(getDifficultyForLevel(1)).toBe('easy')
     expect(getDifficultyForLevel(2)).toBe('normal')
-    expect(getDifficultyForLevel(3)).toBe('hard')
-    expect(getDifficultyForLevel(4)).toBe('easy')
+    expect(getDifficultyForLevel(3)).toBe('normal')
+    expect(getDifficultyForLevel(4)).toBe('hard')
+    expect(getDifficultyForLevel(5)).toBe('normal')
+    expect(getDifficultyForLevel(6)).toBe('easy')
     expect(getDifficultyForLevel(9)).toBe('hard')
-    expect(getDifficultyForLevel(10)).toBe('easy')
+    expect(getDifficultyForLevel(10)).toBe('normal')
+    expect(getDifficultyForLevel(11)).toBe('easy')
   })
 })
 

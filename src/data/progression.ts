@@ -6,7 +6,7 @@
 // There is no chapter grouping anymore — every level is generated independently
 // on demand (functions/src/index.ts's generateLevelNow) with its own randomly
 // picked categories, and the whole game is one flat, endlessly-numbered sequence:
-// level 1, 2, 3, .... Difficulty cycles easy/normal/hard every 3 levels.
+// level 1, 2, 3, .... Difficulty cycles easy/normal/normal/hard/normal every 5 levels.
 
 import type { Difficulty } from '../engine/types'
 
@@ -16,10 +16,10 @@ export interface LevelRecordLike {
 
 export type LevelRecords = Record<string, LevelRecordLike | undefined>
 
-const DIFFICULTY_CYCLE: Difficulty[] = ['easy', 'normal', 'hard']
+const DIFFICULTY_CYCLE: Difficulty[] = ['easy', 'normal', 'normal', 'hard', 'normal']
 
-/** Level numbers are 1-based; difficulty repeats in a fixed 3-level cycle
- * (1=easy, 2=normal, 3=hard, 4=easy, ...). */
+/** Level numbers are 1-based; difficulty repeats in a fixed 5-level cycle
+ * (1=easy, 2=normal, 3=normal, 4=hard, 5=normal, 6=easy, ...). */
 export function getDifficultyForLevel(levelNumber: number): Difficulty {
   return DIFFICULTY_CYCLE[(levelNumber - 1) % DIFFICULTY_CYCLE.length]
 }
