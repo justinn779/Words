@@ -26,6 +26,7 @@ function App() {
   const dailyDate = useGameStore((s) => s.dailyDate)
   const initCloud = usePlayerStore((s) => s.initCloud)
   const loadLevels = useContentStore((s) => s.loadLevels)
+  const generateLevel = useContentStore((s) => s.generateLevel)
   const animationsOn = usePlayerStore((s) => s.settings.animationsOn)
 
   useEffect(() => {
@@ -38,6 +39,14 @@ function App() {
     // instead of offering to regenerate content that already exists.
     loadLevels()
   }, [initCloud, loadLevels])
+
+  // TEMPORARY one-off admin trigger: regenerates level 1 even though later
+  // levels already exist (the normal bootstrap in contentStore.ts only fires
+  // when the WHOLE levels collection is empty). Remove after use — see the
+  // conversation that added this.
+  useEffect(() => {
+    if (window.location.hash === '#regenerate-level-1') void generateLevel(1)
+  }, [generateLevel])
 
   useEffect(() => {
     document.documentElement.classList.toggle('animations-off', !animationsOn)
