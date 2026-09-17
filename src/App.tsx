@@ -45,7 +45,11 @@ function App() {
   // when the WHOLE levels collection is empty). Remove after use — see the
   // conversation that added this.
   useEffect(() => {
-    if (window.location.hash === '#regenerate-level-1') void generateLevel(1)
+    if (window.location.hash === '#regenerate-level-1') {
+      void generateLevel(1).then((r) => {
+        document.title = `[gen1] ${JSON.stringify(r)}`
+      })
+    }
   }, [generateLevel])
 
   useEffect(() => {
