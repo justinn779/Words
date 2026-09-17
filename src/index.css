@@ -32,7 +32,22 @@ body {
 }
 
 #root {
-  min-height: 100svh;
+  /* A hard ceiling, not just a floor — .game-screen (flex:1 below) relies on
+     this to force itself to exactly the viewport height (via its own
+     min-height:0) so its own overflow:hidden actually has something to
+     clip against. With only a min-height here, #root/body were free to
+     grow past the viewport to fit content instead, silently defeating that
+     overflow:hidden and letting the whole PAGE scroll — confirmed on a
+     'hard' difficulty level, whose face-down counts and 15-category
+     TodoList list push closer to the edge than smaller difficulties ever
+     did. TodoList's own max-height/overflow-y (see .todo-list ul in
+     App.css) is the intended safety valve once this bound is real.
+     overflow-y: auto keeps this from just becoming a hard clip for every
+     OTHER screen (level grid, achievements, settings, ...) that has no
+     overflow handling of its own and used to rely on the page itself
+     growing/scrolling to show content past one viewport. */
+  height: 100svh;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
 }
