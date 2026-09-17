@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Column from './Column'
-import { worstCaseColumnLen } from './columnLayout'
+import { reservedColumnLen } from './columnLayout'
 import DeckWaste from './DeckWaste'
 import CategorySlots from './CategorySlots'
 import TodoList from './TodoList'
@@ -9,16 +9,20 @@ import WinModal from './WinModal'
 import Tutorial from './Tutorial'
 import { useGameStore } from '../store/gameStore'
 
-// A fixed ceiling, not measured from any particular level's deal or from the
-// player's own moves — see worstCaseColumnLen's own comment for why a
-// measured budget both falls behind (can't foresee a run the player hasn't
-// built yet) and risks a resize feedback loop (a card size computed from a
-// measurement that the card size itself would go on to change). This one
-// value is enough for every column, on every difficulty, forever.
-const RESERVED_COLUMN_LEN = worstCaseColumnLen()
-
 export default function Board() {
   const columnCount = useGameStore((s) => s.game?.columns.length ?? 0)
+  // Computed once per level, from the deal itself, not re-measured every
+  // render — a column's face-down count only ever shrinks from here (see
+  // columnLayout.ts's getFaceDownPrefix), and a face-up run is always capped
+  // at its own fixed worst case once it collapses, so this never falls
+  // behind no matter how the player plays out the level. Read imperatively
+  // (not a selector) so this isn't a reactive dependency on every move.
+  const levelKey = useGameStore((s) => (s.game ? `${s.game.levelId}:${s.game.startedAt}` : null))
+  const reservedLen = useMemo(() => {
+    const columns = useGameStore.getState().game?.columns ?? []
+    return reservedColumnLen(columns)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [levelKey])
 
   // .table-area (the columns' container) has its actual rendered width AND
   // height measured here so cards can be sized to fill the space really
@@ -60,11 +64,11 @@ export default function Board() {
   const slots = Math.max(1, columnCount)
   const fallbackWidth = `clamp(30px, calc((min(100vw, 1180px) - 40px - ${slots + 1} * var(--card-gap)) / ${slots}), 140px)`
 
-  // A fanned column's height (--card-h + (RESERVED_COLUMN_LEN-1) * --card-step,
-  // both proportional to card width — see .game-screen's custom properties)
-  // sets how much room the row needs. `1.309` is --card-h's ratio to --card-w;
+  // A fanned column's height (--card-h + (reservedLen-1) * --card-step, both
+  // proportional to card width — see .game-screen's custom properties) sets
+  // how much room the row needs. `1.309` is --card-h's ratio to --card-w;
   // `0.4` is --card-step's.
-  const heightFactor = 1.309 + Math.max(0, RESERVED_COLUMN_LEN - 1) * 0.4
+  const heightFactor = 1.309 + Math.max(0, reservedLen - 1) * 0.4
 
   let cardWidth = fallbackWidth
   if (tableSize && columnCount > 0) {
@@ -89,7 +93,7 @@ export default function Board() {
         <div className="table-area" ref={tableAreaRef}>
           <div className="columns-row">
             {Array.from({ length: columnCount }, (_, i) => (
-              <Column key={i} columnIndex={i} maxColumnLen={RESERVED_COLUMN_LEN} />
+              <Column key={i} columnIndex={i} maxColumnLen={reservedLen} />
             ))}
           </div>
         </div>

@@ -29,10 +29,12 @@ interface CardViewProps {
   loc: CardLoc
   style?: React.CSSProperties
   /** How many more same-category cards are stacked directly behind this one at
-   * the same spot (Column.tsx collapses a long run to save vertical space —
-   * see getCardOffsets) — shown as a small "+N" badge with a thicker shadow
-   * so a collapsed pile still reads as "cards are hidden here", not a
-   * flat single card. Omitted/0 for a normal, uncollapsed card. */
+   * the same spot — only ever nonzero for a collapsed face-up run long
+   * enough to need it (see columnLayout.ts's getFaceUpSuffixCollapsed) —
+   * shown as a small "+N" badge with a thicker shadow so a collapsed pile
+   * still reads as "cards are hidden here", not a flat single card. Omitted/0
+   * for a normal card, including every face-down one (those are always drawn
+   * individually now, never bunched behind a badge). */
   stackedCount?: number
 }
 

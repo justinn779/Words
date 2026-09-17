@@ -1,19 +1,25 @@
 // Pure fan-layout math for a tableau column — split out of Column.tsx so that
 // file can stay component-only (co-locating a plain function export there trips
 // Fast Refresh's "only export components" check). Board.tsx also needs
-// worstCaseColumnLen to size every column's reserved height off the same
-// collapse logic this module actually renders with.
+// reservedColumnLen to size every column's reserved height off the same
+// layout math this module actually renders with.
 
 import type { Card } from '../engine/types'
 
-/** How much of a hidden card peeks out from behind the one in front of it,
- * within a collapsed group — in units of a normal (uncollapsed) fan step. A
- * collapsed card shows no information worth spending a full step's peek on
- * (a card-back is identical to every other, and a collapsed same-category
- * card's word is already implied by the ones still fully visible), so a
- * sliver is enough to read as "more cards are stacked here" without eating
- * into the column's height budget the way a full step would. */
+/** How much of a hidden card peeks out from behind the one in front of it —
+ * in units of a normal (uncollapsed) fan step. A face-down card shows
+ * nothing (every card-back looks identical — see CardView.tsx) and a
+ * collapsed same-category card's word is already implied by the ones still
+ * fully visible, so a thin sliver is enough to read as "there's more here"
+ * without eating into the column's height the way a full step would. */
 const PEEK_STEP = 1 / 3
+
+/** The fixed number of thin peek steps a collapsed same-category run always
+ * reserves once it's long enough to collapse (see getFaceUpSuffixCollapsed)
+ * — older members bunch behind a badge, and only the newest
+ * COLLAPSED_GROUP_STEPS-1 each get their own peek, no matter how long the
+ * run actually is. */
+const COLLAPSED_GROUP_STEPS = 3
 
 export interface CardRenderInfo {
   /** Fan-step offset, in units of --card-step. */
@@ -22,49 +28,25 @@ export interface CardRenderInfo {
   stackedCount: number
 }
 
-/** The fixed number of thin peek steps a collapsed group (face-down or a
- * same-category face-up run) always reserves after its bunched front, no
- * matter how many cards are actually in it — see getFaceDownPrefix and
- * getFaceUpSuffixCollapsed. Keeping the reserved space itself constant is
- * what makes "collapsed" a fixed shape rather than something that still
- * grows or shrinks by a sliver as cards are added or removed. */
-const COLLAPSED_GROUP_STEPS = 3
-
 /**
- * The face-down prefix at the bottom of a column: at most the last 2 cards
- * get their own (thin, PEEK_STEP) offset, and everything before that sits
- * bunched at offset 0 behind a badge — the SAME fixed shape regardless of
- * how many face-down cards there actually are, from 1 all the way up, and
- * critically ending at the SAME fixed nextStep regardless of that count too
- * (a 1-card and a 50-card face-down prefix reserve identical space) — so
- * face-down cards can never nudge anything above them, ever. Only a column's
- * own top card ever starts (or gets flipped) face-up, so these are always a
- * contiguous run at index 0, and since they render identically regardless of
- * category (see CardView.tsx's card-back branch) there's no information lost
- * by using this fixed shape from the very first render — a wall of identical
- * card-backs has nothing to show anyway, so there's no reason its rendered
- * footprint should depend on the deal's card count at all. This is what
- * keeps a level's INITIAL deal itself within the reserved height on the
- * larger difficulty shapes (see difficultyShapes.ts); without it, Board.tsx
- * would have to reserve room for the deal's raw card count, which only
- * grows with content and has no ceiling.
+ * The face-down prefix at the bottom of a column: every face-down card gets
+ * its own thin (PEEK_STEP) peek, drawn individually — no bunching, no "+N"
+ * badge standing in for the ones underneath. A column's face-down count is
+ * fixed the moment the level is dealt (flipping a card only ever shrinks it;
+ * nothing during play ever adds to it — see gameStore.ts's flipTopCard), so
+ * unlike a face-up run it can never grow past what Board.tsx already
+ * accounted for when the level started — there's nothing here that needs
+ * capping, only keeping thin. Only a column's own top card ever starts (or
+ * gets flipped) face-up, so these are always a contiguous run at index 0.
  */
 function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex: number; nextStep: number } {
   const info: CardRenderInfo[] = []
   let faceDownEnd = -1
   while (faceDownEnd + 1 < column.length && !column[faceDownEnd + 1].faceUp) faceDownEnd++
-  if (faceDownEnd < 0) return { info, nextIndex: 0, nextStep: 0 }
-
-  const faceDownLen = faceDownEnd + 1
-  const peekCount = Math.min(faceDownLen, COLLAPSED_GROUP_STEPS)
-  const bunchEnd = faceDownEnd - (peekCount - 1)
-  for (let k = 0; k <= bunchEnd; k++) {
-    info[k] = { offset: 0, stackedCount: k === bunchEnd ? bunchEnd : 0 }
+  for (let k = 0; k <= faceDownEnd; k++) {
+    info[k] = { offset: PEEK_STEP * k, stackedCount: 0 }
   }
-  for (let j = 1; j < peekCount; j++) {
-    info[bunchEnd + j] = { offset: PEEK_STEP * j, stackedCount: 0 }
-  }
-  return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * COLLAPSED_GROUP_STEPS }
+  return { info, nextIndex: faceDownEnd + 1, nextStep: PEEK_STEP * (faceDownEnd + 1) }
 }
 
 /** Every remaining (face-up) card gets its own fan step — no collapsing. */
@@ -75,18 +57,20 @@ function getFaceUpSuffixNatural(column: Card[], start: number, startStep: number
 }
 
 /**
- * The face-up suffix, with a same-category word run of 3+ cards (optionally
- * capped by that category's own Category Card — see game-rules.md) collapsed
- * down to just 2 fan steps: its older members share one step instead of each
- * adding their own, with only the frontmost of that shared group actually
- * visible — flagged with `stackedCount` (how many more are hidden directly
- * behind it) so CardView can badge it, rather than silently disappearing.
+ * The face-up suffix, with a same-category word run of COLLAPSED_GROUP_STEPS+
+ * cards (optionally capped by that category's own Category Card — see
+ * game-rules.md) collapsed down to just 2 thin peek steps (PEEK_STEP): its
+ * older members share one step instead of each adding their own, with only
+ * the frontmost of that shared group actually visible — flagged with
+ * `stackedCount` (how many more are hidden directly behind it) so CardView
+ * can badge it, rather than silently disappearing. This one DOES need a real
+ * cap, unlike the face-down prefix above: a run grows as the player plays,
+ * with no ceiling of its own (a category could need arbitrarily many words),
+ * so its rendered footprint has to stop growing once it reaches this shape.
  * Only used once getFaceUpSuffixNatural's height would exceed the column's
- * reserved budget — unlike the face-down prefix above, a face-up run's word
- * text is actual information, so it stays fully fanned whenever there's room.
- * Clicking/dragging still picks up the whole bound group regardless of any of
- * this (see gameStore.ts's tryPickSelection) — it only changes where cards
- * are drawn from, never what counts as pickable.
+ * reserved budget. Clicking/dragging still picks up the whole bound group
+ * regardless of any of this (see gameStore.ts's tryPickSelection) — it only
+ * changes where cards are drawn from, never what counts as pickable.
  */
 function getFaceUpSuffixCollapsed(column: Card[], start: number, startStep: number): CardRenderInfo[] {
   const info: CardRenderInfo[] = []
@@ -132,7 +116,7 @@ function getFaceUpSuffixCollapsed(column: Card[], start: number, startStep: numb
 }
 
 /** The fan-step offset of a column's last card with its face-down prefix
- * collapsed (see getFaceDownPrefix) but its face-up suffix left natural — the
+ * rendered (see getFaceDownPrefix) but its face-up suffix left natural — the
  * height a column needs before deciding whether the same-category run also
  * needs to collapse. */
 function naturalFannedOffset(column: Card[]): number {
@@ -149,22 +133,14 @@ export function getCardRenderInfo(column: Card[], maxColumnLen: number): CardRen
   return [...prefix.info.slice(0, prefix.nextIndex), ...suffix.slice(prefix.nextIndex)]
 }
 
-/** A synthetic worst case: enough face-down cards to trigger their collapse,
- * then a same-category face-up run long enough to trigger its own — both
- * collapse policies cap their contribution at a fixed number of steps no
- * matter how many cards they're actually hiding (see getFaceDownPrefix and
- * getFaceUpSuffixCollapsed), so this one synthetic column's collapsed length
- * is the most ANY real column, on ANY difficulty, can ever need. */
-function buildWorstCaseColumn(): Card[] {
-  const faceDown: Card[] = Array.from({ length: 3 }, (_, i) => ({
-    id: `worst-case-down-${i}`,
-    cardType: 'word',
-    wordId: `worst-case-down-${i}`,
-    text: '',
-    categoryId: 'worst-case',
-    faceUp: false,
-  }))
-  const faceUp: Card[] = Array.from({ length: 3 }, (_, i) => ({
+/** A synthetic same-category run, exactly long enough to trigger its own
+ * collapse — used to measure the face-up portion's own worst-case footprint
+ * (see reservedColumnLen below). Collapsing already caps this at a fixed
+ * number of steps no matter how much longer a real run grows past this
+ * length (see getFaceUpSuffixCollapsed), so this one synthetic run's
+ * collapsed height is the most a real run can ever add. */
+function faceUpWorstCaseOffset(): number {
+  const run: Card[] = Array.from({ length: COLLAPSED_GROUP_STEPS }, (_, i) => ({
     id: `worst-case-up-${i}`,
     cardType: 'word',
     wordId: `worst-case-up-${i}`,
@@ -172,19 +148,22 @@ function buildWorstCaseColumn(): Card[] {
     categoryId: 'worst-case',
     faceUp: true,
   }))
-  return [...faceDown, ...faceUp]
+  const collapsed = getFaceUpSuffixCollapsed(run, 0, 0)
+  return collapsed[collapsed.length - 1]?.offset ?? 0
 }
 
-/** The reserved column length (Board.tsx's reservedColumnLen) that's always
- * enough — computed once, from the collapse logic itself, rather than
- * measured from whatever a level happens to deal or a player happens to
- * build. A budget derived from the CURRENT board can only be as generous as
- * that snapshot: it can't foresee a run the player hasn't built yet, and
- * feeding a live measurement back into the very card size that measurement
- * depends on risks a resize feedback loop. This has neither problem — it
- * never changes, so it can't fall behind and can't oscillate. */
-export function worstCaseColumnLen(): number {
-  const column = buildWorstCaseColumn()
-  const info = getCardRenderInfo(column, 0)
-  return (info[info.length - 1]?.offset ?? 0) + 1
+/** Board.tsx's per-level reserved column height: the tallest column's actual
+ * face-down count (fixed the moment this level was dealt — see
+ * getFaceDownPrefix) plus the face-up portion's own fixed worst case. Meant
+ * to be computed once per level (from `columns` read at deal time, not
+ * reactively on every render) and then left alone — a column's face-down
+ * count can only shrink from here, and a face-up run can grow but is always
+ * capped at faceUpWorstCaseOffset's contribution once it does, so this
+ * never falls behind no matter how the player plays out the level.
+ * Deliberately NOT sourced from any DOM measurement — see Board.tsx's own
+ * comment on why a --card-w computed from a measurement that --card-w itself
+ * goes on to affect is a resize feedback loop waiting to happen. */
+export function reservedColumnLen(columns: Card[][]): number {
+  const maxFaceDownStep = Math.max(0, ...columns.map((c) => getFaceDownPrefix(c).nextStep))
+  return maxFaceDownStep + faceUpWorstCaseOffset() + 1
 }
