@@ -67,8 +67,14 @@ export default function CardView({ card, loc, style, stackedCount = 0 }: CardVie
 
   if (!card.faceUp) {
     return (
-      <div className="card card-back" style={style} data-card-id={card.id} aria-hidden>
+      <div
+        className={['card', 'card-back', stackedCount > 0 ? 'card-stacked' : ''].filter(Boolean).join(' ')}
+        style={style}
+        data-card-id={card.id}
+        aria-hidden
+      >
         <div className="card-back-pattern" />
+        {stackedCount > 0 && <span className="card-stack-badge">+{stackedCount}</span>}
       </div>
     )
   }

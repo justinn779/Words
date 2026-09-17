@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Column from './Column'
+import { naturalFannedOffset } from './columnLayout'
 import DeckWaste from './DeckWaste'
 import CategorySlots from './CategorySlots'
 import TodoList from './TodoList'
@@ -16,16 +17,26 @@ export default function Board() {
   // tracking the *current* longest column — cards moving between columns
   // during play would otherwise constantly nudge the card size, making the
   // whole board visibly resize on every move instead of just when a new
-  // level actually starts. A player piling a whole category onto one column
-  // could in principle still grow past this, but Column.tsx collapses a run
-  // of 3+ same-category cards down to 2 fan steps (see getCardOffsets), so
-  // the initial deal's own tallest column remains the real ceiling.
+  // level actually starts.
   const levelKey = useGameStore((s) => (s.game ? `${s.game.levelId}:${s.game.startedAt}` : null))
+  // The tallest column's height with its face-down prefix already collapsed
+  // (see Column.tsx's naturalFannedOffset) — NOT the raw card count, which has
+  // no ceiling as difficulty shapes grow (see difficultyShapes.ts) and would
+  // force reserving room for a wall of identical card-backs that never
+  // actually renders that tall. +1 converts the 0-indexed offset to a length.
   const maxColumnLen = useMemo(() => {
     const columns = useGameStore.getState().game?.columns ?? []
-    return Math.max(1, ...columns.map((c) => c.length))
+    return Math.max(1, ...columns.map((c) => naturalFannedOffset(c) + 1))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [levelKey])
+  // A column that's already at that natural height has zero slack — the
+  // moment a player piles even one more (non-collapsible, since collapsing only
+  // kicks in for an actual 3+ same-category run) card onto it, it would overflow
+  // the reserved height with nothing to absorb the difference. Reserving 2 extra
+  // steps of headroom means ordinary 1-2 card growth just fits; Column.tsx's
+  // same-category collapse (see maxColumnLen there) only has to kick in once a
+  // column genuinely outgrows that padded budget.
+  const reservedColumnLen = maxColumnLen + 2
 
   // .table-area (the columns' container) has its actual rendered width AND
   // height measured here so cards can be sized to fill the space really
@@ -53,11 +64,11 @@ export default function Board() {
   const slots = Math.max(1, columnCount)
   const fallbackWidth = `clamp(30px, calc((min(100vw, 1180px) - 40px - ${slots + 1} * var(--card-gap)) / ${slots}), 140px)`
 
-  // A fanned column's height (--card-h + (maxColumnLen-1) * --card-step, both
-  // proportional to card width — see .game-screen's custom properties) sets
-  // how much room the row needs. `1.309` is --card-h's ratio to --card-w;
+  // A fanned column's height (--card-h + (reservedColumnLen-1) * --card-step,
+  // both proportional to card width — see .game-screen's custom properties)
+  // sets how much room the row needs. `1.309` is --card-h's ratio to --card-w;
   // `0.4` is --card-step's.
-  const heightFactor = 1.309 + Math.max(0, maxColumnLen - 1) * 0.4
+  const heightFactor = 1.309 + Math.max(0, reservedColumnLen - 1) * 0.4
 
   let cardWidth = fallbackWidth
   if (tableSize && columnCount > 0) {
@@ -82,7 +93,7 @@ export default function Board() {
         <div className="table-area" ref={tableAreaRef}>
           <div className="columns-row">
             {Array.from({ length: columnCount }, (_, i) => (
-              <Column key={i} columnIndex={i} maxColumnLen={maxColumnLen} />
+              <Column key={i} columnIndex={i} maxColumnLen={reservedColumnLen} />
             ))}
           </div>
         </div>

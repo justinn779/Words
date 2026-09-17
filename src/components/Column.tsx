@@ -1,94 +1,21 @@
-import type { Card } from '../engine/types'
 import CardView from './CardView'
 import { useGameStore } from '../store/gameStore'
+import { getCardRenderInfo } from './columnLayout'
 
 interface ColumnProps {
   columnIndex: number
-  /** The height every column is sized for (Board.tsx's maxColumnLen, from the
-   * initial deal) — collapsing only kicks in once a column's actual card
-   * count grows past this, not unconditionally. A column within its
-   * reserved budget always shows its full, uncollapsed fan. */
+  /** The height every column is sized for — Board.tsx's reservedColumnLen. The
+   * face-down prefix (see columnLayout.ts) always collapses regardless of this
+   * budget; the face-up same-category run only collapses once the column's
+   * total height would otherwise exceed it. */
   maxColumnLen: number
-}
-
-interface CardRenderInfo {
-  /** Fan-step offset, in units of --card-step. */
-  offset: number
-  /** Cards hidden directly behind this one at the same offset — see below. */
-  stackedCount: number
-}
-
-/**
- * Per-card fan position for a column. A same-category, face-up word run of 3+
- * cards (optionally capped by that category's own Category Card — see
- * game-rules.md) collapses down to just 2 fan steps: its older members share
- * one step instead of each adding their own, with only the frontmost of that
- * shared group actually visible — flagged with `stackedCount` (how many more
- * are hidden directly behind it) so CardView can badge it, rather than
- * silently disappearing. Without the collapse itself, a player deliberately
- * piling up a whole category before delivering it to a slot could grow a
- * column past the height Board.tsx reserves for it. Clicking/dragging still
- * picks up the whole bound group regardless of any of this (see
- * gameStore.ts's tryPickSelection) — it only changes where cards are drawn.
- */
-function getCardRenderInfo(column: Card[]): CardRenderInfo[] {
-  const info: CardRenderInfo[] = []
-  let step = 0
-  let i = 0
-  while (i < column.length) {
-    const card = column[i]
-    if (card.faceUp && card.cardType === 'word') {
-      let runEnd = i
-      while (runEnd + 1 < column.length) {
-        const next = column[runEnd + 1]
-        if (next.faceUp && next.cardType === 'word' && next.categoryId === card.categoryId) runEnd++
-        else break
-      }
-      // A capping Category Card (same category) rides along as part of the run.
-      const capCandidate = column[runEnd + 1]
-      if (capCandidate?.faceUp && capCandidate.cardType === 'category' && capCandidate.categoryId === card.categoryId) {
-        runEnd++
-      }
-      const runLen = runEnd - i + 1
-      if (runLen >= 3) {
-        const collapsedFront = runEnd - 2
-        for (let k = i; k <= collapsedFront; k++) {
-          info[k] = { offset: step, stackedCount: k === collapsedFront ? collapsedFront - i : 0 }
-        }
-        info[runEnd - 1] = { offset: step + 1, stackedCount: 0 }
-        info[runEnd] = { offset: step + 2, stackedCount: 0 }
-        step += 2
-      } else {
-        for (let k = i; k <= runEnd; k++) {
-          info[k] = { offset: step, stackedCount: 0 }
-          step += 1
-        }
-      }
-      i = runEnd + 1
-    } else {
-      info[i] = { offset: step, stackedCount: 0 }
-      step += 1
-      i++
-    }
-  }
-  return info
-}
-
-/** Every card gets its own fan step — no collapsing. Used whenever a column
- * still fits the height Board.tsx reserved for it. */
-function getNaturalRenderInfo(column: Card[]): CardRenderInfo[] {
-  return column.map((_, i) => ({ offset: i, stackedCount: 0 }))
 }
 
 export default function Column({ columnIndex, maxColumnLen }: ColumnProps) {
   const column = useGameStore((s) => s.game?.columns[columnIndex] ?? [])
   const clickEmptyColumn = useGameStore((s) => s.clickEmptyColumn)
 
-  // Only collapse once this column has actually grown past the height it was
-  // reserved for (e.g. a player piled a whole category onto it) — a column
-  // still within budget shows every card its own step, same as before this
-  // feature existed.
-  const renderInfo = column.length > maxColumnLen ? getCardRenderInfo(column) : getNaturalRenderInfo(column)
+  const renderInfo = getCardRenderInfo(column, maxColumnLen)
   const fanned = renderInfo.length > 0 ? renderInfo[renderInfo.length - 1].offset : 0
 
   return (
