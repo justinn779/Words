@@ -4,10 +4,10 @@ import { getCardRenderInfo } from './columnLayout'
 
 interface ColumnProps {
   columnIndex: number
-  /** The height every column is sized for — Board.tsx's reservedColumnLen. The
-   * face-down prefix (see columnLayout.ts) always collapses regardless of this
-   * budget; the face-up same-category run only collapses once the column's
-   * total height would otherwise exceed it. */
+  /** The height every column is sized for — Board.tsx's RESERVED_COLUMN_LEN.
+   * The face-down prefix (see columnLayout.ts) always collapses regardless of
+   * this budget; the face-up same-category run only collapses once the
+   * column's total height would otherwise exceed it. */
   maxColumnLen: number
 }
 

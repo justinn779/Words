@@ -1,8 +1,8 @@
 // Pure fan-layout math for a tableau column — split out of Column.tsx so that
 // file can stay component-only (co-locating a plain function export there trips
 // Fast Refresh's "only export components" check). Board.tsx also needs
-// naturalFannedOffset to size every column's reserved height off the same math
-// this module actually renders with.
+// worstCaseColumnLen to size every column's reserved height off the same
+// collapse logic this module actually renders with.
 
 import type { Card } from '../engine/types'
 
@@ -23,17 +23,17 @@ export interface CardRenderInfo {
 }
 
 /**
- * The face-down prefix at the bottom of a column, always collapsed to 2 fan
- * steps once it's 3+ cards long — unconditionally, not just once the column
- * outgrows its budget. Only a column's own top card ever starts (or gets
- * flipped) face-up, so these are always a contiguous run at index 0, and since
- * they render identically regardless of category (see CardView.tsx's
- * card-back branch) there's no information lost by collapsing them from the
- * very first render — a wall of identical card-backs has nothing to show
- * anyway. This is what keeps a level's INITIAL deal itself within the
- * reserved height on the larger difficulty shapes (see difficultyShapes.ts);
- * without it, Board.tsx would have to reserve room for the deal's raw card
- * count, which only grows with content and has no ceiling.
+ * The face-down prefix at the bottom of a column, always collapsed to 2 thin
+ * peek steps (see PEEK_STEP) once it's 3+ cards long — unconditionally, not
+ * just once the column outgrows its budget. Only a column's own top card ever
+ * starts (or gets flipped) face-up, so these are always a contiguous run at
+ * index 0, and since they render identically regardless of category (see
+ * CardView.tsx's card-back branch) there's no information lost by collapsing
+ * them from the very first render — a wall of identical card-backs has
+ * nothing to show anyway. This is what keeps a level's INITIAL deal itself
+ * within the reserved height on the larger difficulty shapes (see
+ * difficultyShapes.ts); without it, Board.tsx would have to reserve room for
+ * the deal's raw card count, which only grows with content and has no ceiling.
  */
 function getFaceDownPrefix(column: Card[]): { info: CardRenderInfo[]; nextIndex: number; nextStep: number } {
   const info: CardRenderInfo[] = []
@@ -123,7 +123,7 @@ function getFaceUpSuffixCollapsed(column: Card[], start: number, startStep: numb
  * collapsed (see getFaceDownPrefix) but its face-up suffix left natural — the
  * height a column needs before deciding whether the same-category run also
  * needs to collapse. */
-export function naturalFannedOffset(column: Card[]): number {
+function naturalFannedOffset(column: Card[]): number {
   if (column.length === 0) return 0
   const prefix = getFaceDownPrefix(column)
   const natural = getFaceUpSuffixNatural(column, prefix.nextIndex, prefix.nextStep)
@@ -135,4 +135,44 @@ export function getCardRenderInfo(column: Card[], maxColumnLen: number): CardRen
   const natural = getFaceUpSuffixNatural(column, prefix.nextIndex, prefix.nextStep)
   const suffix = naturalFannedOffset(column) > maxColumnLen ? getFaceUpSuffixCollapsed(column, prefix.nextIndex, prefix.nextStep) : natural
   return [...prefix.info.slice(0, prefix.nextIndex), ...suffix.slice(prefix.nextIndex)]
+}
+
+/** A synthetic worst case: enough face-down cards to trigger their collapse,
+ * then a same-category face-up run long enough to trigger its own — both
+ * collapse policies cap their contribution at a fixed number of steps no
+ * matter how many cards they're actually hiding (see getFaceDownPrefix and
+ * getFaceUpSuffixCollapsed), so this one synthetic column's collapsed length
+ * is the most ANY real column, on ANY difficulty, can ever need. */
+function buildWorstCaseColumn(): Card[] {
+  const faceDown: Card[] = Array.from({ length: 3 }, (_, i) => ({
+    id: `worst-case-down-${i}`,
+    cardType: 'word',
+    wordId: `worst-case-down-${i}`,
+    text: '',
+    categoryId: 'worst-case',
+    faceUp: false,
+  }))
+  const faceUp: Card[] = Array.from({ length: 3 }, (_, i) => ({
+    id: `worst-case-up-${i}`,
+    cardType: 'word',
+    wordId: `worst-case-up-${i}`,
+    text: '',
+    categoryId: 'worst-case',
+    faceUp: true,
+  }))
+  return [...faceDown, ...faceUp]
+}
+
+/** The reserved column length (Board.tsx's reservedColumnLen) that's always
+ * enough — computed once, from the collapse logic itself, rather than
+ * measured from whatever a level happens to deal or a player happens to
+ * build. A budget derived from the CURRENT board can only be as generous as
+ * that snapshot: it can't foresee a run the player hasn't built yet, and
+ * feeding a live measurement back into the very card size that measurement
+ * depends on risks a resize feedback loop. This has neither problem — it
+ * never changes, so it can't fall behind and can't oscillate. */
+export function worstCaseColumnLen(): number {
+  const column = buildWorstCaseColumn()
+  const info = getCardRenderInfo(column, 0)
+  return (info[info.length - 1]?.offset ?? 0) + 1
 }
